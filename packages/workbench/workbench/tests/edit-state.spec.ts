@@ -145,6 +145,17 @@ describe('edit state', () => {
     expect(landed?.kind === 'brief' && landed.duty).toBe('')
   })
 
+  it('leaves a card’s other bodies alone while bringing the brief into step', () => {
+    const table: AuthoredBody = {
+      id: BodyId('b2'), label: '预算', source: 'ai', lastRev: 1, kind: 'table', columns: ['项目'], rows: [],
+    }
+    let state = stateWith(['n1', { bodies: [brief('b1'), table] }])
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { duty: '管这块' } })
+    state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
+    const landed = state.nodes.get(NodeId('n1'))?.bodies
+    expect(landed?.[1]).toEqual(table)
+  })
+
   it('commits a card that has no content bodies at all, from a log written earlier', () => {
     let state = stateWith(['n1', {}])
     state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '改名' } })

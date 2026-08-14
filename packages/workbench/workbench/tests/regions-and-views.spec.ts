@@ -229,6 +229,15 @@ describe('derived views', () => {
     })])
     expect(derivedViews(plottable, [], NodeId('n1')).map(view => view.kind)).toContain('chart')
   })
+
+  it('walks past the bodies that plot nothing to find the one that does', () => {
+    const mixed = graphOf([node('n1', {
+      parent: null,
+      bodies: [brief('intro', 1), table('cost', ['做法', '成本'], [['甲', '8']])],
+    })])
+    const chart = derivedViews(mixed, [], NodeId('n1')).find(view => view.kind === 'chart')
+    expect(chart?.kind === 'chart' && chart.axis).toBe('成本')
+  })
 })
 
 describe('the required body', () => {
