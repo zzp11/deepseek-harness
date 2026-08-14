@@ -1,0 +1,213 @@
+/* Two columns and a meter strip: the tree on the left, the focused node on the
+   right, counters pinned at the foot. The tab owns no chrome of its own — the
+   conversation view ring already frames it. */
+
+.root {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  grid-template-rows: 1fr auto;
+  height: 100%;
+  min-height: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+}
+
+.tree {
+  grid-column: 1;
+  grid-row: 1;
+  overflow: auto;
+  padding: 12px 8px;
+  border-right: 1px solid var(--dsw-alias-separator);
+  min-height: 0;
+}
+
+.focus {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: auto;
+  padding: 16px;
+  min-height: 0;
+}
+
+.meter {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border-top: 1px solid var(--dsw-alias-separator);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.sectionTitle {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--dsw-alias-fill-quaternary);
+}
+
+.rowSelected {
+  background: var(--dsw-alias-fill-tertiary);
+}
+
+.mark {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rowTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 24px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.emptyTitle {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--dsw-alias-fill-quaternary);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.warn {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.block {
+  margin: 0 0 12px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.text {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 72px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-separator);
+  border-radius: 4px;
+  background: var(--dsw-alias-fill-quaternary);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.line {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  border: 1px solid var(--dsw-alias-separator);
+  border-radius: 4px;
+  background: var(--dsw-alias-fill-quaternary);
+  color: inherit;
+  font: inherit;
+}
+
+.fields {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.fields th,
+.fields td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--dsw-alias-separator);
+  text-align: left;
+  vertical-align: top;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.button {
+  padding: 4px 10px;
+  border: 1px solid var(--dsw-alias-separator);
+  border-radius: 4px;
+  background: var(--dsw-alias-fill-quaternary);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--dsw-alias-fill-tertiary);
+}
+
+.card {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-alias-separator);
+  border-radius: 6px;
+}
+
+.cardRuled {
+  opacity: 0.6;
+}
+
+.hint {
+  margin: 4px 0 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.refusal {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--dsw-alias-fill-quaternary);
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+}

@@ -39,6 +39,7 @@
 | `@deepseek-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`、`ctx.systemPrompt`、`a live continuable in-process child Agent` | `tool/call`、`tool/result`、`a user-role message in the direct parent session` | - | 按可继续的进程内子级注册，而非全局注册，因此该 schema 仅在这种子级内部可见，并且不受其全局 `toolFilter` 影响。同一份贡献还会安装子级作用域的 `tool:report` 系统提示词 section，本目录不渲染该 section。面向父级的 `send_message` 工具单独安装。 |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
+| `@deepseek-ai/dsh-workbench` | `workbench_check_promotion`, `workbench_propose`, `workbench_read_nodes` | `ctx.tools`, `ctx.systemPrompt`, `ctx.commands`, `owning Agent session` | `tool/call`, `workbench/snapshot`, `workbench/proposal`, `tool/result` | - | 三个工具都不写节点树。`workbench_read_nodes` 的 nodeId 是**可选**的：不传就只返回约束区和树的索引，而这是冷启动拿到第一个 id 的唯一途径。`workbench_propose` 记一份由人裁决的草稿。**故意没有会晋升的工具** —— 晋升是人做出承诺的那一刻，由人的编辑命令拥有。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
 
@@ -1732,6 +1733,159 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 来源：[`packages/todo/tool-todo/src/index.ts`](../packages/todo/tool-todo/src/index.ts)
 
 todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。
+
+<a id="deepseek-aidsh-workbench"></a>
+
+## `@deepseek-ai/dsh-workbench`
+
+### `workbench_check_promotion`
+
+问一个节点现在能不能晋升到已承诺，缺什么。**它不晋升**——晋升是人的动作。拿到缺项后用 workbench_propose 去补。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "nodeId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "nodeId"
+  ]
+}
+```
+
+来源：[`packages/workbench/workbench/src/tools.ts`](../packages/workbench/workbench/src/tools.ts)
+
+### `workbench_propose`
+
+提一份草稿。这是你唯一的写路径，草稿不进本体：人会看、可能就地改、然后采纳或不要。可以给一个已有节点补正文和字段，也可以提一批新节点（冷启动时的候选骨架）。闸门当场校验，过不了会返回缺什么而不是记下一份落不了地的草稿。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "一行说清这份草稿是什么。"
+    },
+    "targetNode": {
+      "type": "string",
+      "description": "这份草稿针对哪个节点。提新骨架时留空。"
+    },
+    "summary": {
+      "type": "string",
+      "description": "给人看的一句话摘要。"
+    },
+    "body": {
+      "type": "string",
+      "description": "给 targetNode 的正文。"
+    },
+    "fields": {
+      "type": "array",
+      "description": "给 targetNode 提的字段。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "字段名。已承诺区必须是已登记的名字。"
+          },
+          "value": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string",
+            "description": "一手层条目 id：这个取值是从哪句原话来的。已承诺区必填。"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ]
+      }
+    },
+    "newNodes": {
+      "type": "array",
+      "description": "提议新建的节点。parent 留空就挂在 targetNode 下（targetNode 也为空则挂到根）。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "parent": {
+            "type": "string",
+            "description": "已存在的父节点 id。"
+          },
+          "duty": {
+            "type": "string",
+            "description": "这个节点管什么。有子节点的节点晋升时必须有。"
+          },
+          "body": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "字段名。已承诺区必须是已登记的名字。"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "sourceId": {
+                  "type": "string",
+                  "description": "一手层条目 id：这个取值是从哪句原话来的。已承诺区必填。"
+                }
+              },
+              "required": [
+                "name",
+                "value"
+              ]
+            }
+          }
+        },
+        "required": [
+          "title"
+        ]
+      }
+    }
+  },
+  "required": [
+    "title"
+  ]
+}
+```
+
+来源：[`packages/workbench/workbench/src/tools.ts`](../packages/workbench/workbench/src/tools.ts)
+
+### `workbench_read_nodes`
+
+读一个工作台节点的依赖集：它自己的全部字段、父链的职责与正文、全部全局约束、它的字段引用的一手层原话，以及整棵树的索引。这是机械展开的完整结果，不要在它之外自己推断依赖——需要别的节点就再调一次。**不知道有哪些节点时，不要传 nodeId**：那样只返回全局约束和整棵树的索引，树是空的就返回空索引。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "nodeId": {
+      "type": "string",
+      "description": "要读哪个节点。留空只看全局约束和树的索引——冷启动时就该留空。"
+    }
+  }
+}
+```
+
+来源：[`packages/workbench/workbench/src/tools.ts`](../packages/workbench/workbench/src/tools.ts)
+
+None of the three writes the node tree. `workbench_read_nodes` takes an OPTIONAL nodeId: omitting it answers with the constraint area and the tree index alone, which is the only way a cold start gets its first id. `workbench_propose` records a draft a person rules on. There is deliberately no tool that promotes — promotion is the moment a person commits, and the human edit command owns it.
 
 <a id="deepseek-aidsh-tool-workflow"></a>
 

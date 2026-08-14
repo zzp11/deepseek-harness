@@ -27,10 +27,14 @@ const CSS_VIRTUAL_SUFFIX = '.mjs'
 /**
  * Wire/type layers a client bundle may inline: browser-safe contracts
  * with no runtime identity to share (no Symbol/instanceof/singleton state).
+ * `dsh-workbench/projection` qualifies for the same reason and is listed by its
+ * exact subpath: the package root reaches cordis and the tool registry, while
+ * that entry is the pure model/derivation layer the browser half must fold the
+ * event family with rather than reimplementing it.
  * Everything else under @deepseek-ai/* is either a module-table entry
  * (external) or a leak the purity gate rejects.
  */
-export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand)(\/|$)/
+export const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|session|llm|tools|brand)(\/|$)|^@deepseek-ai\/dsh-workbench\/projection$/
 
 /**
  * Vendored framework libraries: rescoped into @deepseek-ai, so the gate below

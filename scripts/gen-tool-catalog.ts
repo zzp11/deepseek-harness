@@ -63,6 +63,8 @@ import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
 import * as ToolRalph from '@deepseek-ai/dsh-tool-ralph'
 import * as ToolWorkflow from '@deepseek-ai/dsh-tool-workflow'
+import CommandRuntime from '@deepseek-ai/dsh-commands'
+import * as Workbench from '@deepseek-ai/dsh-workbench'
 import { githubSlug } from './verify-md-links.ts'
 
 /** Attachment seam marker that makes the attachments-conditional `read_image` schema harvestable. */
@@ -517,6 +519,20 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-workbench',
+    dir: 'workbench',
+    source: 'packages/workbench/workbench/src/tools.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.commands', 'owning Agent session'],
+    writes: ['tool/call', 'workbench/snapshot', 'workbench/proposal', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(CommandRuntime)
+      await ctx.plugin(Workbench, { snapshotEveryChanges: 50 })
+    },
+    note:
+      'None of the three writes the node tree. `workbench_read_nodes` takes an OPTIONAL nodeId: omitting it answers with the constraint area and the tree index alone, which is the only way a cold start gets its first id. `workbench_propose` records a draft a person rules on. There is deliberately no tool that promotes — promotion is the moment a person commits, and the human edit command owns it.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-workflow',

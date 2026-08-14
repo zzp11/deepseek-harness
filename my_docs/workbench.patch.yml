@@ -1,0 +1,22 @@
+# 方案C 工作台 —— 阶段 0 开发用 --patch overlay。
+#
+#   pnpm dsh web --patch my_docs/workbench.patch.yml --port 3081
+#
+# 这是叠在 web profile（dsh-base + dsh-web-app 两层 bundle patch）之上的又一层
+# 同级 patch list，不是一棵树。端口走 web app 自己的 --port 旗标，overlay 因此
+# 不重述 webserver 行。
+#
+# 两行都在 overlay 里，这是实测过的：`02-评审发现` §七-3 问"客户端 roster 行能不能
+# 不改 packages/bundle/web-app/cordis.patch.yml"——**能**。client-modules 的 node 半
+# 扫的是 Loader 的 entries，overlay 插入的行同样是 entry。
+#
+# 唯一还需要的仓库触点是 packages/bundle/web-app/package.json 里的一行依赖：bare row
+# name 由 $DSH_HOME/profiles/node_modules 解析，而那个回退目录是按 app 依赖闭包 BFS
+# healed 出来的。两个 60 天分别被改 60／88 次的热文件（apiproxy 的 rpc-map.ts 与
+# web-app 的 cordis.patch.yml）都不用碰。详见 my_docs/04-实现偏差记录.md D-01／D-16。
+- insert:
+    - id: workbench
+      name: '@deepseek-ai/dsh-workbench'
+
+    - id: workbench-client
+      name: '@deepseek-ai/dsh-client-workbench'

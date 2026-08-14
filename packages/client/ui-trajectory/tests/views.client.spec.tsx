@@ -89,7 +89,10 @@ function historySnapshot(
   return {
     sessionId: SID,
     views: {
-      get: target => target === 'trajectory' ? trajectory : undefined,
+      // A stub keyed by one target cannot satisfy the generic reader's
+      // intersection over every registered target; narrowing belongs here, not
+      // in the contract.
+      get: target => (target === 'trajectory' ? trajectory : undefined) as never,
     },
     chat: EMPTY_CHAT_SNAPSHOT,
     nodes,

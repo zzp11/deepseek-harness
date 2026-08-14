@@ -2993,6 +2993,26 @@ export interface Config {
 
 来源：[`packages/web/web-search-perplexity/src/index.ts:32`](../packages/web/web-search-perplexity/src/index.ts)
 
+<a id="deepseek-aidsh-workbench"></a>
+
+## `@deepseek-ai/dsh-workbench`
+
+需要：`commands` · `sessions` · `tools` · `systemPrompt`
+
+```ts config-catalog
+/** Deployment-varying choices this plugin exposes to cordis.yml. */
+export interface Config {
+  /**
+   * How many `workbench/node-change` events may accumulate before a checkpoint
+   * is appended. A promotion always checkpoints regardless. Lower costs log
+   * bytes; higher costs cold-start replay.
+   */
+  snapshotEveryChanges: number
+}
+```
+
+来源：[`packages/workbench/workbench/src/index.ts:40`](../packages/workbench/workbench/src/index.ts)
+
 <a id="deepseek-aidsh-workflow-worker-thread"></a>
 
 ## `@deepseek-ai/dsh-workflow-worker-thread`
@@ -3062,6 +3082,7 @@ export interface Config {
 - `@deepseek-ai/dsh-client-ui-user-questions`（[`packages/client/ui-user-questions/src/index.ts`](../packages/client/ui-user-questions/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-workflow-run`（[`packages/client/ui-workflow-run/src/index.ts`](../packages/client/ui-workflow-run/src/index.ts)）
 - `@deepseek-ai/dsh-client-ui-workspace`（[`packages/client/ui-workspace/src/index.ts`](../packages/client/ui-workspace/src/index.ts)）
+- `@deepseek-ai/dsh-client-workbench`（[`packages/client/workbench/src/index.ts`](../packages/client/workbench/src/index.ts)）
 - `@deepseek-ai/dsh-command-compact` — 需要 `commands` · `compact`（[`packages/compaction/command-compact/src/index.ts`](../packages/compaction/command-compact/src/index.ts)）
 - `@deepseek-ai/dsh-command-feedback` — 需要 `commands`（[`packages/feedback/command-feedback/src/index.ts`](../packages/feedback/command-feedback/src/index.ts)）
 - `@deepseek-ai/dsh-command-goal` — 需要 `commands` · `goals`（[`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts)）

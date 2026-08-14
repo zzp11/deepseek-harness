@@ -942,3 +942,60 @@ Source: [`packages/core/session/src/types.ts:264`](../packages/core/session/src/
 ```
 
 Source: [`packages/web/web-search-deepseek/src/provider.ts:83`](../packages/web/web-search-deepseek/src/provider.ts)
+
+### `workbench/*`
+
+<a id="workbenchnode-change--log-only"></a>
+
+#### `workbench/node-change` — log-only
+
+```ts persistence-catalog
+/** One committed change to one workbench node; events of one commit share a `rev`. */
+'workbench/node-change': WorkbenchNodeChange
+```
+
+Source: [`packages/workbench/workbench/src/events.ts:135`](../packages/workbench/workbench/src/events.ts)
+
+<a id="workbenchproposal--log-only"></a>
+
+#### `workbench/proposal` — log-only
+
+```ts persistence-catalog
+/** One model draft awaiting a human verdict; it does not reach the tree. */
+'workbench/proposal': WorkbenchProposal
+```
+
+Source: [`packages/workbench/workbench/src/events.ts:139`](../packages/workbench/workbench/src/events.ts)
+
+<a id="workbenchsnapshot--log-only"></a>
+
+#### `workbench/snapshot` — log-only
+
+```ts persistence-catalog
+/** Whole-value checkpoint of the workbench tree, appended on promotion and every configured number of changes. */
+'workbench/snapshot': WorkbenchSnapshot
+```
+
+Source: [`packages/workbench/workbench/src/events.ts:133`](../packages/workbench/workbench/src/events.ts)
+
+<a id="workbenchutterance--log-only"></a>
+
+#### `workbench/utterance` — log-only
+
+```ts persistence-catalog
+/** One verbatim first-hand utterance, mirrored from the person's message. */
+'workbench/utterance': WorkbenchUtterance
+```
+
+Source: [`packages/workbench/workbench/src/events.ts:137`](../packages/workbench/workbench/src/events.ts)
+
+<a id="workbenchverdict--log-only"></a>
+
+#### `workbench/verdict` — log-only
+
+```ts persistence-catalog
+/** A person's ruling on one proposal. */
+'workbench/verdict': WorkbenchVerdict
+```
+
+Source: [`packages/workbench/workbench/src/events.ts:141`](../packages/workbench/workbench/src/events.ts)
