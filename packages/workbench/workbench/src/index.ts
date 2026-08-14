@@ -132,6 +132,10 @@ function mirrorUtterance(
     text,
     rev: state.meta.rev,
     createdAt: event.time,
+    // Stamped from the projection's focus rather than from anything the message
+    // carries: the composer belongs to the conversation surface and knows nothing
+    // about cards, so the card the person was on is recorded by the workbench.
+    ...state.focus === null ? {} : { moduleId: state.focus },
   }
   queueMicrotask(() => {
     // The fiber may have gone, or the session been detached, between the message

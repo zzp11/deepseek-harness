@@ -50,6 +50,19 @@ describe('idea-region membership', () => {
   })
 })
 
+describe('a node the graph does not carry', () => {
+  it('encloses no idea area rather than refusing, because a partial window is legal', () => {
+    expect(ideaRoots(nested, NodeId('never-arrived'))).toEqual([])
+  })
+
+  it('answers "not known to be inside" when the walk up hits a parent the window lacks', () => {
+    // The browser folds a window of the log, so a card can legally arrive before the
+    // parent it names. Membership answers with what it can reach; it does not refuse.
+    const broken = graphOf([node('orphan', { parent: NodeId('never-arrived') })])
+    expect(ideaRoots(broken, NodeId('orphan'))).toEqual([])
+  })
+})
+
 describe('visibility', () => {
   it('hides an idea from the module it hangs under', () => {
     expect(visibleFrom(nested, NodeId('m'), NodeId('idea'))).toBe(false)
@@ -192,7 +205,7 @@ describe('derived views', () => {
 
   it('offers the relation view when an edge exists', () => {
     const linked = graphOf([node('a', { fields: { 依赖: { value: 'b' } } }), node('b')])
-    expect(derivedViews(linked, NodeId('a'))).toContain('relation')
+    expect(derivedViews(linked, [], NodeId('a')).map(view => view.kind)).toContain('relation')
   })
 
   it('draws a relation edge only when the named node exists', () => {
@@ -203,9 +216,10 @@ describe('derived views', () => {
     expect(relationEdges(graph, NodeId('a'))).toEqual([{ from: NodeId('a'), to: NodeId('b'), via: '依赖' }])
   })
 
-  it('omits a view that would draw nothing rather than offering it disabled', () => {
-    expect(derivedViews(nested, NodeId('sub'))).toEqual(['ideas'])
-    expect(derivedViews(nested, NodeId('m'))).toEqual(['submodule-map', 'constraints', 'ideas'])
+  it('omits a view that would draw nothing — including an idea area nobody has opened', () => {
+    expect(derivedViews(nested, [], NodeId('sub'))).toEqual([])
+    expect(derivedViews(nested, [], NodeId('m')).map(view => view.kind))
+      .toEqual(['submodule-map', 'constraints', 'ideas'])
   })
 
   it('offers the chart exactly when a card owns a plottable table', () => {
@@ -213,7 +227,7 @@ describe('derived views', () => {
       parent: null,
       bodies: [table('cost', ['做法', '成本'], [['甲', '8']])],
     })])
-    expect(derivedViews(plottable, NodeId('n1'))).toContain('chart')
+    expect(derivedViews(plottable, [], NodeId('n1')).map(view => view.kind)).toContain('chart')
   })
 })
 

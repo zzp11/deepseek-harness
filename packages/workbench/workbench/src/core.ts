@@ -12,7 +12,7 @@
 import { NodeId, type BodyId, type SourceId } from './brand.ts'
 import {
   GLOBAL_CONSTRAINT_ROOT_ID, MATURITY_LABELS, NUMERIC_CELL, SKELETON_FIELD_NAMES, SKELETON_ITEM_ID,
-  type AuthoredBody, type ChartPoint, type DependencyItem, type DerivedView, type DerivedViewKind, type NodeGraph,
+  type AuthoredBody, type ChartPoint, type DependencyItem, type DerivedView, type NodeGraph,
   type NodeSource, type PendingProposal, type RelationEdge, type Shape, type SubmoduleMapItem, type WorkbenchMeta,
   type WorkbenchNode,
 } from './model.ts'
@@ -68,6 +68,33 @@ export function ancestors(graph: NodeGraph, nodeId: NodeId): WorkbenchNode[] {
 }
 
 /**
+ * The parent chain of a node, nearest first, stopping at a parent the graph does not
+ * carry rather than refusing.
+ *
+ * {@link ancestors} refuses instead, and both are right for their callers: an
+ * injection or a breadcrumb over a broken chain would be wrong and must say so,
+ * while the browser legitimately folds a PARTIAL window in which a node's parent has
+ * simply not arrived. A membership question over a broken chain answers "not known
+ * to be inside", which is the reading that cannot invent membership.
+ * @param graph - the read model.
+ * @param nodeId - the node to walk up from.
+ * @returns the reachable ancestors, nearest first.
+ */
+function reachableChain(graph: NodeGraph, nodeId: NodeId): WorkbenchNode[] {
+  const chain: WorkbenchNode[] = []
+  const seen = new Set<NodeId>([nodeId])
+  let parent = graph.nodes.get(nodeId)?.parent ?? null
+  while (parent !== null && !seen.has(parent)) {
+    seen.add(parent)
+    const node = graph.nodes.get(parent)
+    if (node === undefined) return chain
+    chain.push(node)
+    parent = node.parent
+  }
+  return chain
+}
+
+/**
  * Every node of the global-constraint area — the descendants of
  * {@link GLOBAL_CONSTRAINT_ROOT_ID}, excluding the root itself. An absent root
  * gives an empty area, which is stage 0's normal state.
@@ -94,7 +121,7 @@ export function constraints(graph: NodeGraph): WorkbenchNode[] {
  */
 export function isConstraint(graph: NodeGraph, nodeId: NodeId): boolean {
   return graph.nodes.has(nodeId)
-    && ancestors(graph, nodeId).some(node => node.id === GLOBAL_CONSTRAINT_ROOT_ID)
+    && reachableChain(graph, nodeId).some(node => node.id === GLOBAL_CONSTRAINT_ROOT_ID)
 }
 
 /**
@@ -248,7 +275,8 @@ export function shapeCandidates(graph: NodeGraph, nodeId: NodeId): Shape[] {
  * @returns the enclosing idea roots.
  */
 export function ideaRoots(graph: NodeGraph, nodeId: NodeId): NodeId[] {
-  const chain = [...ancestors(graph, nodeId), requireNode(graph, nodeId)]
+  const self = graph.nodes.get(nodeId)
+  const chain = [...reachableChain(graph, nodeId).reverse(), ...self === undefined ? [] : [self]]
   return chain.filter(node => node.region === 'idea').map(node => node.id)
 }
 
@@ -471,24 +499,47 @@ export function relationEdges(graph: NodeGraph, nodeId: NodeId): RelationEdge[] 
 }
 
 /**
- * Which derived views a card affords right now, in tag-strip order.
+ * The derived views a card affords right now, built, in tag-strip order.
  *
  * A view that would draw nothing is absent rather than disabled. A disabled tag
  * reads as "this card could show a chart, you just have not unlocked it", which is
  * the wrong signal: the honest statement is that nothing on this card supports one.
+ *
+ * It answers with the views themselves rather than their kinds so a tag and the body
+ * it opens cannot come from two calls that disagree — and so no caller has to carry a
+ * fallback for a kind it was told about but cannot then build.
  * @param graph - the read model.
+ * @param proposals - the proposal records, for the reminder counts the maps carry.
  * @param nodeId - the card to inspect.
- * @returns the available derived-view kinds.
+ * @returns the available views, tag-strip order.
  */
-export function derivedViews(graph: NodeGraph, nodeId: NodeId): DerivedViewKind[] {
+export function derivedViews(
+  graph: NodeGraph,
+  proposals: Iterable<PendingProposal>,
+  nodeId: NodeId,
+): DerivedView[] {
   const node = requireNode(graph, nodeId)
-  const kinds: DerivedViewKind[] = []
-  if (children(graph, nodeId).some(child => child.region !== 'idea')) kinds.push('submodule-map')
-  if (relationEdges(graph, nodeId).length > 0) kinds.push('relation')
-  if ((node.bodies ?? []).some(body => chartOf(body) !== null)) kinds.push('chart')
-  if (node.parent === null) kinds.push('constraints')
-  kinds.push('ideas')
-  return kinds
+  const records = [...proposals]
+  const views: DerivedView[] = []
+  const map = submoduleMap(graph, records, nodeId)
+  if (map.length > 0) views.push({ kind: 'submodule-map', items: map })
+  const edges = relationEdges(graph, nodeId)
+  if (edges.length > 0) views.push({ kind: 'relation', edges })
+  for (const body of node.bodies ?? []) {
+    const chart = chartOf(body)
+    if (chart !== null) {
+      views.push(chart)
+      break
+    }
+  }
+  if (node.parent === null) views.push({ kind: 'constraints', items: constraints(graph) })
+  // Offered only once the area exists. A tag for something not there yet reads as
+  // "there are ideas, you just have not looked", which is the wrong signal; opening
+  // the area is an action on the card, not a tab that shows nothing.
+  if (children(graph, nodeId).some(child => child.region === 'idea')) {
+    views.push({ kind: 'ideas', items: ideaArea(graph, records, nodeId) })
+  }
+  return views
 }
 
 /**

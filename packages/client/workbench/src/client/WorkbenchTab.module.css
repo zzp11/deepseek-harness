@@ -1,51 +1,86 @@
-/* Two columns and a meter strip: the tree on the left, the focused node on the
-   right, counters pinned at the foot. The tab owns no chrome of its own — the
-   conversation view ring already frames it. */
+/* Three columns and a meter: the tree locates, the card says what this is, the
+   conversation column says what was said here. Every colour and every type step
+   comes from a `--dsw-*` token — a name invented here resolves to nothing, which
+   makes borders vanish and fills go transparent rather than looking wrong. */
 
 .root {
   display: grid;
-  grid-template-columns: minmax(200px, 280px) 1fr;
-  grid-template-rows: 1fr auto;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
   min-height: 0;
+  box-sizing: border-box;
+  /* ConversationRoot publishes the floating composer's live height; a view tab
+     that does not reserve it renders its own last row underneath the composer. */
+  padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+  background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
-  font-size: 14px;
+  font: var(--dsw-font-s-14);
 }
 
-.tree {
-  grid-column: 1;
+/* Below this width the three columns cannot all stay readable; the conversation
+   column is the one that gives way, because it has a sibling Chat tab. */
+@media (width <= 1180px) {
+  .root { grid-template-columns: minmax(180px, 220px) minmax(0, 1fr); }
+  .talk { display: none; }
+}
+
+.map {
   grid-row: 1;
   overflow: auto;
-  padding: 12px 8px;
-  border-right: 1px solid var(--dsw-alias-separator);
   min-height: 0;
+  padding: 12px 8px;
+  border-right: 1px solid var(--dsw-alias-border-l2);
 }
 
 .focus {
-  grid-column: 2;
   grid-row: 1;
   overflow: auto;
-  padding: 16px;
   min-height: 0;
+  padding: 16px;
+}
+
+.talk {
+  grid-row: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 12px;
+  border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
 .meter {
   grid-column: 1 / -1;
   grid-row: 2;
   display: flex;
-  gap: 16px;
+  align-items: baseline;
+  gap: 14px;
   flex-wrap: wrap;
   padding: 6px 12px;
-  border-top: 1px solid var(--dsw-alias-separator);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-tertiary);
 }
 
-.sectionTitle {
-  margin: 0 0 8px;
+/* The one number about the person rather than the tree. C6 is why it is not the
+   same weight as the rest: nobody notices their own verification slipping. */
+.meterSelf {
+  font: var(--dsw-font-xxs-strong-12);
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  font-weight: 600;
+}
+
+/* ── left column ─────────────────────────────────────────────────── */
+
+.section { margin-bottom: 14px; }
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 0 6px;
+  font: var(--dsw-font-xxs-strong-12);
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .row {
@@ -55,7 +90,7 @@
   width: 100%;
   padding: 4px 6px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: none;
   color: inherit;
   font: inherit;
@@ -63,18 +98,16 @@
   cursor: pointer;
 }
 
-.row:hover {
-  background: var(--dsw-alias-fill-quaternary);
+.row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.rowSelected { background: var(--dsw-alias-button-ghost-active-fill); }
+.rowSelected:hover { background: var(--dsw-alias-interactive-bg-active); }
+
+.row:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -2px;
 }
 
-.rowSelected {
-  background: var(--dsw-alias-fill-tertiary);
-}
-
-.mark {
-  flex: none;
-  color: var(--dsw-alias-label-tertiary);
-}
+.mark { flex: none; color: var(--dsw-alias-label-tertiary); }
 
 .rowTitle {
   overflow: hidden;
@@ -82,132 +115,328 @@
   white-space: nowrap;
 }
 
-.empty {
-  padding: 24px;
-  color: var(--dsw-alias-label-secondary);
+.rowCount {
+  flex: none;
+  margin-left: auto;
+  font: var(--dsw-font-xxxs-11);
+  color: var(--dsw-alias-label-tertiary);
 }
 
-.emptyTitle {
-  margin: 0 0 8px;
-  color: var(--dsw-alias-label-primary);
-  font-size: 16px;
+.rowReminder {
+  flex: none;
+  margin-left: auto;
+  font: var(--dsw-font-xxxs-strong-11);
+  color: var(--dsw-alias-state-warn-label);
 }
 
-.header {
+/* ── the card ────────────────────────────────────────────────────── */
+
+.card {
+  max-width: 920px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+  /* The elevation belongs to this surface, and a wide diagram inside it scrolls;
+     the properties inherit down to whichever descendant does (see ui-theme
+     styles/scrollbar.css for the rebinding contract). */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
+/* Edit state: the same card, not a second kind of card. The dashed edge and the
+   bar are the whole visual difference, and they carry the two actions. */
+.cardEditing {
+  border-style: dashed;
+  border-color: var(--dsw-alias-state-warn-primary);
+}
+
+.pending {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 9px 9px 0 0;
+  background: var(--dsw-alias-state-warn-tertiary);
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.pendingActions { margin-left: auto; display: flex; gap: 6px; }
+
+.head {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin: 0 0 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px 8px;
 }
 
 .title {
   margin: 0;
-  font-size: 16px;
+  font: var(--dsw-font-m-18);
+  color: var(--dsw-alias-label-primary);
 }
 
-.badge {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--dsw-alias-fill-quaternary);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-}
-
-.warn {
-  color: var(--dsw-alias-label-secondary);
-}
-
-.block {
-  margin: 0 0 12px;
-}
-
-.label {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-}
-
-.text {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 72px;
-  padding: 6px 8px;
-  border: 1px solid var(--dsw-alias-separator);
-  border-radius: 4px;
-  background: var(--dsw-alias-fill-quaternary);
-  color: inherit;
-  font: inherit;
-  resize: vertical;
-}
-
-.line {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 4px 8px;
-  border: 1px solid var(--dsw-alias-separator);
-  border-radius: 4px;
-  background: var(--dsw-alias-fill-quaternary);
-  color: inherit;
-  font: inherit;
-}
-
-.fields {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.fields th,
-.fields td {
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--dsw-alias-separator);
-  text-align: left;
-  vertical-align: top;
-}
-
-.actions {
+.crumbs {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 8px;
+  align-items: baseline;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0 14px;
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-tertiary);
 }
 
-.button {
-  padding: 4px 10px;
-  border: 1px solid var(--dsw-alias-separator);
-  border-radius: 4px;
-  background: var(--dsw-alias-fill-quaternary);
-  color: inherit;
+.crumb {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
   font: inherit;
   cursor: pointer;
 }
 
-.button:hover {
-  background: var(--dsw-alias-fill-tertiary);
-}
+.crumb:hover { color: var(--dsw-alias-label-primary); }
 
-.card {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--dsw-alias-separator);
-  border-radius: 6px;
-}
-
-.cardRuled {
-  opacity: 0.6;
-}
-
-.hint {
-  margin: 4px 0 8px;
+/* Title-row metadata, capped at three entries so the row stays scannable. */
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-left: auto;
+  font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
+}
+
+.tags {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--dsw-alias-border-l3);
+  /* Never wraps: an overflowing strip goes into the ⋯ menu instead of growing a
+     second row, because a two-row strip is no longer scanned in one glance. */
+  overflow: hidden;
+}
+
+.tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xs-13);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tag:hover { color: var(--dsw-alias-label-primary); }
+
+.tagActive {
+  border-bottom-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-xs-strong-13);
+}
+
+/* A derived view is drawn from the tree and cannot go stale; the prefix says so
+   before the person wonders whether they need to sync it. */
+.tagDerived { color: var(--dsw-alias-label-tertiary); }
+
+.tagStale {
+  color: var(--dsw-alias-state-warn-label);
+  font: var(--dsw-font-xs-13);
+}
+
+.body {
+  padding: 14px;
+  min-height: 120px;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--dsw-alias-border-l3);
+}
+
+.warn {
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-state-warn-label);
 }
 
 .refusal {
   margin: 0 0 12px;
   padding: 8px 10px;
-  border-radius: 4px;
-  background: var(--dsw-alias-fill-quaternary);
+  border: 1px solid var(--dsw-alias-state-error-primary);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-3);
+  font: var(--dsw-font-xs-13);
   color: var(--dsw-alias-label-primary);
   white-space: pre-wrap;
+}
+
+/* ── content bodies ──────────────────────────────────────────────── */
+
+.prose { font: var(--dsw-font-s-14); color: var(--dsw-alias-label-primary); }
+
+.duty {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-3);
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.grid { width: 100%; border-collapse: collapse; font: var(--dsw-font-xs-13); }
+
+.grid th,
+.grid td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--dsw-alias-border-l3);
+  text-align: left;
+  vertical-align: top;
+}
+
+.grid th {
+  font: var(--dsw-font-xs-strong-13);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.diagram { display: block; max-width: 100%; overflow-x: auto; }
+
+.diagramNode {
+  fill: var(--dsw-alias-bg-layer-3);
+  stroke: var(--dsw-alias-border-l1);
+}
+
+.diagramNodeAnchored {
+  fill: var(--dsw-alias-state-warn-tertiary);
+  stroke: var(--dsw-alias-state-warn-primary);
+  stroke-width: 2;
+}
+
+.diagramText { fill: var(--dsw-alias-label-primary); font: var(--dsw-font-xxs-12); }
+.diagramEdge { stroke: var(--dsw-alias-border-l1); fill: none; }
+.diagramBar { fill: var(--dsw-alias-brand-primary); }
+
+.cards { display: flex; flex-direction: column; gap: 8px; }
+
+.subcard {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-3);
+  font: var(--dsw-font-xs-13);
+  cursor: default;
+}
+
+.subcardTitle { color: var(--dsw-alias-label-primary); }
+.subcardMeta { margin-left: auto; color: var(--dsw-alias-label-tertiary); font: var(--dsw-font-xxxs-11); }
+
+.empty {
+  padding: 20px 4px;
+  font: var(--dsw-font-xs-13);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* ── inputs ──────────────────────────────────────────────────────── */
+
+.line,
+.text {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-s-14);
+}
+
+.text { min-height: 96px; resize: vertical; }
+
+.line:focus-visible,
+.text:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: -1px;
+}
+
+.label {
+  display: block;
+  margin: 0 0 4px;
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.block { margin: 0 0 12px; }
+
+/* Asking in place, never in a modal: a dialog steals the caret from whatever the
+   person was already typing. */
+.askRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+/* ── conversation column ─────────────────────────────────────────── */
+
+.turn {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  font: var(--dsw-font-xs-13);
+}
+
+.turnWho {
+  margin: 0 0 2px;
+  font: var(--dsw-font-xxs-strong-12);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.turnBody { color: var(--dsw-alias-label-primary); white-space: pre-wrap; }
+
+/* A tool call is one line plus a way in; the whole card lives in the Chat tab. */
+.turnTool {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.anchorBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 6px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-state-warn-label);
+}
+
+.anchorClear {
+  margin-left: auto;
+  border: 0;
+  padding: 0 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }

@@ -15,14 +15,16 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the 'conversation.view' SlotMap row, declared by its owning package.
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { NodeId, ProposalId } from '@deepseek-ai/dsh-workbench/projection'
+import type { BodyId, NodeId, NodeTmp, ProposalId } from '@deepseek-ai/dsh-workbench/projection'
 import type { EditOutcome, WorkbenchInjected } from './contract.ts'
 import { registerWorkbenchFold } from './definition.ts'
 import { en, zh, type WorkbenchKey } from './locales.ts'
 import { createWorkbenchStore } from './store.ts'
 import { WorkbenchTab } from './WorkbenchTab.tsx'
 
-export type { EditOutcome, ProposalRow, TreeRow, WorkbenchInjected, WorkbenchSnapshot, WorkbenchTreeView } from './contract.ts'
+export type {
+  CardView, EditOutcome, ProposalRow, TagEntry, TreeRow, WorkbenchInjected, WorkbenchSnapshot, WorkbenchTreeView,
+} from './contract.ts'
 export type { WorkbenchKey } from './locales.ts'
 export type { WorkbenchStoreState } from './store.ts'
 export { createWorkbenchStore } from './store.ts'
@@ -92,6 +94,12 @@ export function apply(ctx: ClientContext): void {
       }),
       rejectProposal: (proposalId: ProposalId, reason: string) =>
         dispatch(sessionId, { op: 'reject-proposal', proposalId, reason }),
+      setTmp: (nodeId: NodeId, tmp: NodeTmp) => dispatch(sessionId, { op: 'set-tmp', nodeId, tmp }),
+      commitTmp: (nodeId: NodeId) => dispatch(sessionId, { op: 'commit-tmp', nodeId }),
+      discardTmp: (nodeId: NodeId) => dispatch(sessionId, { op: 'discard-tmp', nodeId }),
+      deleteBody: (nodeId: NodeId, bodyId: BodyId) => dispatch(sessionId, { op: 'delete-body', nodeId, bodyId }),
+      openIdeas: (nodeId: NodeId) => dispatch(sessionId, { op: 'open-ideas', nodeId }),
+      focusNode: (nodeId: NodeId | null) => dispatch(sessionId, { op: 'focus', nodeId }),
     }),
   }, WorkbenchTab))
 }

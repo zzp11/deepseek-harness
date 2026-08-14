@@ -86,6 +86,13 @@ export interface WorkbenchNodeChange {
 export interface WorkbenchUtterance {
   readonly entryId: SourceId
   readonly text: string
+  /**
+   * The card the person had focused when they said it, so the conversation column
+   * can show one module's exchange rather than the whole session's.
+   *
+   * Absent when nothing was focused — at cold start there is no card yet.
+   */
+  readonly moduleId?: NodeId
   /** The global `rev` current when this was appended, so a dependency item drawn from it can report a `rev`. */
   readonly rev: number
   readonly createdAt: number
@@ -183,6 +190,15 @@ export interface WorkbenchScratch {
   readonly tmp: NodeTmp | null
 }
 
+/**
+ * Which card the person is working on. Costs no `rev` and changes no content; it
+ * exists so the utterance mirror can stamp an utterance with the module it was said
+ * in, which is what lets one module's conversation be shown on its own.
+ */
+export interface WorkbenchFocus {
+  readonly nodeId: NodeId | null
+}
+
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /** Whole-value checkpoint of the workbench tree, appended on promotion and every configured number of changes. */
@@ -211,5 +227,7 @@ declare module '@deepseek-ai/dsh-session/types' {
      * that recorded only a reference to the edit state would break that property.
      */
     'workbench/scratch': WorkbenchScratch
+    /** Which card the person is working on. Never moves `rev`; changes no content. */
+    'workbench/focus': WorkbenchFocus
   }
 }

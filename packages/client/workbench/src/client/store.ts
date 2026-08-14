@@ -1,31 +1,48 @@
 /**
- * Per-session viewing and drafting state of the workbench tab. Which node is in
- * focus, what a person has typed into a proposal card before accepting, and the
- * last refusal the host answered with — all of it interaction state, none of it
- * business data. The tree itself lives in the fold.
+ * Per-session viewing state of the workbench tab: which card is focused, which tag
+ * is open on it, what the conversation is anchored to, and which inline question is
+ * showing.
+ *
+ * None of it reaches the log, and none of it needs to. A card's uncommitted content
+ * is the host's edit state — that survives a reload and a change of machine — while
+ * everything here is safe to lose.
  */
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
 
-/** One proposal card's edited copy: field name to the value the person typed. */
-export type ProposalEdits = Record<string, string>
-
-/** What the person decided about one proposed node: the title they settled on, and whether they pruned it. */
-export interface NodeChoice {
-  readonly title?: string
-  readonly dropped?: boolean
+/** What the conversation is anchored to: one addressable object inside one body. */
+export interface AnchorState {
+  readonly bodyId: string
+  readonly objectId: string
+  /** What the object says, so the bar names it instead of showing an id. */
+  readonly label: string
 }
 
-/** One proposal card's per-node decisions, keyed by the node's index in the draft. */
-export type NodeChoices = Record<string, NodeChoice>
+/** Which inline question is open. Exactly one at a time, and never a modal. */
+export type AskState =
+  | { readonly kind: 'add-child'; readonly parentId: string | null }
+  | { readonly kind: 'reject'; readonly nodeId: string }
+  | { readonly kind: 'discard-proposal'; readonly proposalId: string }
 
 /** What the tab remembers between renders. */
 export interface WorkbenchStoreState {
-  /** The node in the focus pane; null before anything is selected. */
+  /** The focused card; null before anything is selected. */
   selected: string | null
-  /** Edited copies of proposal cards, keyed by proposal id. Editing costs nothing and writes nothing. */
-  drafts: Record<string, ProposalEdits>
-  /** Which proposed nodes the person kept and what they renamed them to, keyed by proposal id. */
-  nodeChoices: Record<string, NodeChoices>
+  /** Which tag is open per card, so descending and coming back keeps the choice. */
+  openTag: Record<string, string>
+  /**
+   * Argument bodies the person switched to the diagram form, by body id.
+   *
+   * The text twin is what opens, because a diagram silently drops every
+   * conditional, negation, and quantifier the argument carries; the picture is what
+   * you turn to once the words are known to be right.
+   */
+  asDiagram: Record<string, boolean>
+  /** What the conversation is anchored to, if anything. */
+  anchor: AnchorState | null
+  /** The open inline question, if any. */
+  ask: AskState | null
+  /** Which left-column sections are expanded. */
+  sections: { constraints: boolean; working: boolean; rest: boolean }
   /** The last refusal, shown until the next action. */
   refusal: string | null
 }
@@ -33,10 +50,11 @@ export interface WorkbenchStoreState {
 /** Declared action shape, giving the exported factory a stable return type. */
 type WorkbenchActions = {
   select: (draft: WorkbenchStoreState, nodeId: string | null) => void
-  editProposal: (draft: WorkbenchStoreState, proposalId: string, field: string, value: string) => void
-  renameProposed: (draft: WorkbenchStoreState, proposalId: string, index: number, title: string) => void
-  toggleProposed: (draft: WorkbenchStoreState, proposalId: string, index: number) => void
-  clearProposal: (draft: WorkbenchStoreState, proposalId: string) => void
+  openTag: (draft: WorkbenchStoreState, nodeId: string, key: string) => void
+  toggleForm: (draft: WorkbenchStoreState, bodyId: string) => void
+  anchorTo: (draft: WorkbenchStoreState, anchor: AnchorState | null) => void
+  setAsk: (draft: WorkbenchStoreState, ask: AskState | null) => void
+  toggleSection: (draft: WorkbenchStoreState, section: 'constraints' | 'working' | 'rest') => void
   setRefusal: (draft: WorkbenchStoreState, message: string | null) => void
 }
 
@@ -46,31 +64,30 @@ type WorkbenchActions = {
  */
 export function createWorkbenchStore(): EngineStoreHandle<WorkbenchStoreState, WorkbenchActions> {
   return defineStore({
-    init: (): WorkbenchStoreState => ({ selected: null, drafts: {}, nodeChoices: {}, refusal: null }),
+    init: (): WorkbenchStoreState => ({
+      selected: null,
+      openTag: {},
+      asDiagram: {},
+      anchor: null,
+      ask: null,
+      sections: { constraints: true, working: true, rest: true },
+      refusal: null,
+    }),
     actions: {
-      select: (state, nodeId: string | null) => { state.selected = nodeId },
-      editProposal: (state, proposalId: string, field: string, value: string) => {
-        state.drafts[proposalId] = { ...state.drafts[proposalId], [field]: value }
+      // Focusing a different card drops the anchor and any open question: both
+      // belonged to the card being left, and carrying them over would point the
+      // next request at an object that is no longer on screen.
+      select: (draft, nodeId) => {
+        draft.selected = nodeId
+        draft.anchor = null
+        draft.ask = null
       },
-      renameProposed: (state, proposalId: string, index: number, title: string) => {
-        const choices = state.nodeChoices[proposalId] ?? {}
-        state.nodeChoices[proposalId] = { ...choices, [index]: { ...choices[String(index)], title } }
-      },
-      toggleProposed: (state, proposalId: string, index: number) => {
-        const choices = state.nodeChoices[proposalId] ?? {}
-        const current = choices[String(index)]
-        state.nodeChoices[proposalId] = {
-          ...choices,
-          [index]: { ...current, dropped: current?.dropped !== true },
-        }
-      },
-      clearProposal: (state, proposalId: string) => {
-        const { [proposalId]: _edits, ...drafts } = state.drafts
-        const { [proposalId]: _choices, ...nodeChoices } = state.nodeChoices
-        state.drafts = drafts
-        state.nodeChoices = nodeChoices
-      },
-      setRefusal: (state, message: string | null) => { state.refusal = message },
+      openTag: (draft, nodeId, key) => { draft.openTag[nodeId] = key },
+      toggleForm: (draft, bodyId) => { draft.asDiagram[bodyId] = draft.asDiagram[bodyId] !== true },
+      anchorTo: (draft, anchor) => { draft.anchor = anchor },
+      setAsk: (draft, ask) => { draft.ask = ask },
+      toggleSection: (draft, section) => { draft.sections[section] = !draft.sections[section] },
+      setRefusal: (draft, message) => { draft.refusal = message },
     },
   })
 }

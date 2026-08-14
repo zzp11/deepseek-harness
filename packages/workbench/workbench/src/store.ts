@@ -13,8 +13,8 @@
 
 import type { NodeId, ProposalId, SourceId } from './brand.ts'
 import type {
-  CheckpointedProposal, CheckpointedTmp, WorkbenchNodeChange, WorkbenchProposal, WorkbenchScratch, WorkbenchSnapshot,
-  WorkbenchUtterance, WorkbenchVerdict,
+  CheckpointedProposal, CheckpointedTmp, WorkbenchFocus, WorkbenchNodeChange, WorkbenchProposal, WorkbenchScratch,
+  WorkbenchSnapshot, WorkbenchUtterance, WorkbenchVerdict,
 } from './events.ts'
 import type {
   FirstLayerEntry, NodeGraph, NodeTmp, PendingProposal, WorkbenchMeta, WorkbenchNode,
@@ -38,6 +38,8 @@ export interface WorkbenchState extends NodeGraph {
   readonly firstLayer: Map<SourceId, FirstLayerEntry>
   readonly proposals: Map<ProposalId, ProposalRecord>
   readonly tmp: Map<NodeId, NodeTmp>
+  /** The card the person is working on; `null` before anything is focused. */
+  focus: NodeId | null
   meta: WorkbenchMeta
   /** `workbench/node-change` events folded since the last checkpoint; the checkpoint trigger reads it. */
   changesSinceSnapshot: number
@@ -51,11 +53,12 @@ export type WorkbenchEvent =
   | { readonly type: 'workbench/proposal'; readonly data: WorkbenchProposal }
   | { readonly type: 'workbench/verdict'; readonly data: WorkbenchVerdict }
   | { readonly type: 'workbench/scratch'; readonly data: WorkbenchScratch }
+  | { readonly type: 'workbench/focus'; readonly data: WorkbenchFocus }
 
 /** The event types this projection folds; the session-stream listener filters on it. */
 export const WORKBENCH_EVENT_TYPES: ReadonlySet<string> = new Set<WorkbenchEvent['type']>([
   'workbench/snapshot', 'workbench/node-change', 'workbench/utterance', 'workbench/proposal', 'workbench/verdict',
-  'workbench/scratch',
+  'workbench/scratch', 'workbench/focus',
 ])
 
 /**
@@ -69,6 +72,7 @@ export function emptyWorkbenchState(): WorkbenchState {
     firstLayer: new Map(),
     proposals: new Map(),
     tmp: new Map(),
+    focus: null,
     meta: { rev: 0, fieldDictionary: {} },
     changesSinceSnapshot: 0,
   }
@@ -88,6 +92,7 @@ export function cloneWorkbenchState(state: WorkbenchState): WorkbenchState {
     firstLayer: new Map(state.firstLayer),
     proposals: new Map(state.proposals),
     tmp: new Map(state.tmp),
+    focus: state.focus,
     meta: state.meta,
     changesSinceSnapshot: state.changesSinceSnapshot,
   }
@@ -122,6 +127,9 @@ export function applyWorkbenchEvent(state: WorkbenchState, event: WorkbenchEvent
       return
     case 'workbench/scratch':
       applyScratch(state, event.data)
+      return
+    case 'workbench/focus':
+      state.focus = event.data.nodeId
       return
     default:
       // Reachable only from a log carrying a `workbench/*` type this build does
@@ -255,6 +263,7 @@ function applyUtterance(state: WorkbenchState, data: WorkbenchUtterance): void {
     text: data.text,
     rev: data.rev,
     createdAt: data.createdAt,
+    ...data.moduleId === undefined ? {} : { moduleId: data.moduleId },
   })
 }
 

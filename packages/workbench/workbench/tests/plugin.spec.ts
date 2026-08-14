@@ -261,6 +261,25 @@ describe('the first-hand mirror', () => {
       .map(event => (event.data as WorkbenchUtterance).text)).toEqual(['第一句', '第二句', '第三句'])
   })
 
+  it('stamps the card the person was on, so one module\'s exchange can be shown alone', async () => {
+    const { ctx } = await mount()
+    const agent = await agentOn(ctx, 'mirror-module')
+    const created = await edit(ctx, agent, { op: 'create-child', parentId: null, title: '场地' })
+    expect(created.kind).toBe('success')
+    const nodeId = (agent.session.events
+      .filter(event => event.type === 'workbench/node-change')
+      .at(-1)?.data as WorkbenchNodeChange).node.id
+
+    say(agent.session, '还没定位置')
+    await settle()
+    await edit(ctx, agent, { op: 'focus', nodeId })
+    say(agent.session, '就用公司会议室')
+    await settle()
+
+    expect(workbenchEvents(agent.session, 'workbench/utterance')
+      .map(event => (event.data as WorkbenchUtterance).moduleId)).toEqual([undefined, nodeId])
+  })
+
   it('ignores a message carrying no words', async () => {
     const { ctx } = await mount()
     const agent = await agentOn(ctx, 'mirror-empty')

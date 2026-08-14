@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
-import type { NodeId, ProposalId } from '@deepseek-ai/dsh-workbench/projection'
+import type { BodyId, NodeId, ProposalId } from '@deepseek-ai/dsh-workbench/projection'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
 import { WORKBENCH_KIND, WORKBENCH_TARGET } from '../src/client/definition.ts'
@@ -140,6 +140,33 @@ describe('the browser half', () => {
     expect(lastRequest(b.execute)).toEqual({
       op: 'reject-proposal', proposalId: 'p1', reason: '这条不是我要的',
     })
+  })
+
+  it('sends the edit-state ops the two card states need', async () => {
+    const b = await bench()
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    const face = injectedFace(b.slots)
+
+    await face.setTmp('n1' as NodeId, { title: '改了一半', at: 5 })
+    expect(lastRequest(b.execute)).toEqual({ op: 'set-tmp', nodeId: 'n1', tmp: { title: '改了一半', at: 5 } })
+
+    await face.commitTmp('n1' as NodeId)
+    expect(lastRequest(b.execute)).toEqual({ op: 'commit-tmp', nodeId: 'n1' })
+
+    await face.discardTmp('n1' as NodeId)
+    expect(lastRequest(b.execute)).toEqual({ op: 'discard-tmp', nodeId: 'n1' })
+
+    await face.deleteBody('n1' as NodeId, 'b1' as BodyId)
+    expect(lastRequest(b.execute)).toEqual({ op: 'delete-body', nodeId: 'n1', bodyId: 'b1' })
+
+    await face.openIdeas('n1' as NodeId)
+    expect(lastRequest(b.execute)).toEqual({ op: 'open-ideas', nodeId: 'n1' })
+
+    await face.focusNode('n1' as NodeId)
+    expect(lastRequest(b.execute)).toEqual({ op: 'focus', nodeId: 'n1' })
+
+    await face.focusNode(null)
+    expect(lastRequest(b.execute)).toEqual({ op: 'focus', nodeId: null })
   })
 
   it('carries the host refusal through unchanged', async () => {

@@ -947,6 +947,17 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ### `workbench/*`
 
+<a id="workbenchfocus--log-only"></a>
+
+#### `workbench/focus` — log-only
+
+```ts persistence-catalog
+/** Which card the person is working on. Never moves `rev`; changes no content. */
+'workbench/focus': WorkbenchFocus
+```
+
+来源：[`packages/workbench/workbench/src/events.ts:231`](../packages/workbench/workbench/src/events.ts)
+
 <a id="workbenchnode-change--log-only"></a>
 
 #### `workbench/node-change` — log-only
@@ -956,7 +967,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/node-change': WorkbenchNodeChange
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:185`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:207`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchproposal--log-only"></a>
 
@@ -967,7 +978,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/proposal': WorkbenchProposal
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:189`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:211`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchscratch--log-only"></a>
 
@@ -975,20 +986,24 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 ```ts persistence-catalog
 /**
- * One card's uncommitted edit state, or its clearing. Never moves `rev`, and
- * is written with the envelope's `ignorable: true`.
+ * One card's uncommitted edit state, or its clearing. Never moves `rev`.
  *
- * Ignorable is justified rather than convenient: skipping these rebuilds the
- * committed tree byte for byte, and no later event depends on one, because the
- * `workbench/node-change` a commit emits carries the whole committed node
- * instead of citing the edit state it came from. That is a standing constraint
- * — a commit that recorded only a reference to the edit state would make this
- * marker wrong.
+ * Required-on-read like every other member, NOT marked `ignorable`: the
+ * envelope defines that marker but `Session.append` exposes no way to set it,
+ * so no producer in this repository writes one. Being required is the safe
+ * default anyway — a reader that does not know this type refuses the log
+ * instead of silently resuming without it.
+ *
+ * It would nonetheless QUALIFY as ignorable, and that is a standing constraint
+ * rather than an observation: skipping these rebuilds the committed tree byte
+ * for byte, because the `workbench/node-change` a commit emits carries the
+ * whole committed node instead of citing the edit state it came from. A commit
+ * that recorded only a reference to the edit state would break that property.
  */
 'workbench/scratch': WorkbenchScratch
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:203`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:229`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchsnapshot--log-only"></a>
 
@@ -999,7 +1014,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/snapshot': WorkbenchSnapshot
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:183`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:205`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchutterance--log-only"></a>
 
@@ -1010,7 +1025,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/utterance': WorkbenchUtterance
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:187`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:209`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchverdict--log-only"></a>
 
@@ -1021,4 +1036,4 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/verdict': WorkbenchVerdict
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:191`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:213`](../packages/workbench/workbench/src/events.ts)

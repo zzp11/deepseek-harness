@@ -13,10 +13,20 @@ import type {
 } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import {
-  applyWorkbenchEvent, children, cloneWorkbenchState, emptyWorkbenchState, shapeCandidates, structuralHealth,
-  WORKBENCH_EVENT_TYPES, type NodeId, type WorkbenchEvent, type WorkbenchState,
+  applyWorkbenchEvent, children, cloneWorkbenchState, constraints, descendants, emptyWorkbenchState, ideaRoots,
+  isConstraint, pendingProposals, structuralHealth, workingSet, WORKBENCH_EVENT_TYPES,
+  type NodeId, type PendingProposal, type WorkbenchEvent, type WorkbenchNode, type WorkbenchState,
 } from '@deepseek-ai/dsh-workbench/projection'
 import type { TreeRow, WorkbenchSnapshot, WorkbenchTreeView } from './contract.ts'
+
+/**
+ * How many nodes the working set pins.
+ *
+ * Not a taste and not a tunable: working memory holds about four chunks, so a
+ * longer list is a list nobody reads. It is fixed for the same reason a protocol
+ * constant is fixed — the number comes from the person, not from the deployment.
+ */
+export const WORKING_SET_SIZE = 4
 
 /** Definition kind, also the view-node kind. */
 export const WORKBENCH_KIND = 'workbench-tree'
@@ -53,24 +63,55 @@ function advance(state: WorkbenchTreeState, event: SessionEvent): WorkbenchTreeS
 }
 
 /**
+ * One row: the node plus the derived facts a row shows.
+ * @param projection - the folded projection.
+ * @param records - the proposal records, for the reminder count.
+ * @param node - the node this row is for.
+ * @param depth - nesting depth, root at 0.
+ * @returns the row.
+ */
+function treeRow(
+  projection: WorkbenchState,
+  records: readonly PendingProposal[],
+  node: WorkbenchNode,
+  depth: number,
+): TreeRow {
+  return {
+    node,
+    depth,
+    contains: descendants(projection, node.id).length,
+    reminders: pendingProposals(projection, records, node.id),
+    constraint: isConstraint(projection, node.id),
+  }
+}
+
+/**
  * Walk the tree depth-first from the roots, so a row's depth is its nesting.
  * @param projection - the folded projection.
  * @returns one row per node, parents before their children.
  */
 export function treeRows(projection: WorkbenchState): TreeRow[] {
+  const records = [...projection.proposals.values()]
+  const rowFor = (node: WorkbenchNode, depth: number): TreeRow => treeRow(projection, records, node, depth)
   const rows: TreeRow[] = []
   const visit = (parent: NodeId | null, depth: number): void => {
     for (const node of [...projection.nodes.values()].filter(candidate => candidate.parent === parent)) {
-      rows.push({ node, depth, shapes: shapeCandidates(projection, node.id) })
+      // An idea area is reached through its card's tag, never through the tree:
+      // showing it here would put unconfirmed thoughts in main-region navigation.
+      if (node.region === 'idea') continue
+      rows.push(rowFor(node, depth))
       visit(node.id, depth + 1)
     }
   }
   visit(null, 0)
-  // A node whose parent is absent would otherwise vanish from the tree; the
-  // gates keep that out of the log, but a partial window can still show it.
+  // A node whose parent is absent would otherwise vanish from the tree; the gates keep
+  // that out of the log, but a partial window can still show it. The test is enclosure
+  // rather than the node's own region: a card INSIDE an idea area carries `main`, and
+  // asking only about itself would readmit it here as a root the moment its area root
+  // was skipped above.
   const shown = new Set(rows.map(row => row.node.id))
   for (const node of projection.nodes.values()) {
-    if (!shown.has(node.id)) rows.push({ node, depth: 0, shapes: shapeCandidates(projection, node.id) })
+    if (!shown.has(node.id) && ideaRoots(projection, node.id).length === 0) rows.push(rowFor(node, 0))
   }
   return rows
 }
@@ -81,20 +122,28 @@ export function treeRows(projection: WorkbenchState): TreeRow[] {
  * @returns the tree, the drafts, and the meter's counters.
  */
 export function treeView(state: WorkbenchTreeState): WorkbenchTreeView {
-  const nodes = [...state.projection.nodes.values()]
+  const projection = state.projection
+  const nodes = [...projection.nodes.values()]
   const health = structuralHealth(nodes)
+  const rows = treeRows(projection)
+  const records = [...projection.proposals.values()]
   return {
-    rows: treeRows(state.projection),
-    proposals: [...state.projection.proposals.values()].map(record => ({
+    rows,
+    constraints: constraints(projection),
+    // Built rather than looked up among `rows`: the working set is ordered
+    // newest-first, and a lookup would need a fallback for a row it might not find.
+    working: workingSet(projection, WORKING_SET_SIZE).map(node => treeRow(projection, records, node, 0)),
+    proposals: records.map(record => ({
       proposal: record.proposal,
       ruled: record.verdict !== undefined,
     })),
-    rev: state.projection.meta.rev,
+    rev: projection.meta.rev,
     commits: state.commits,
     untouchedModelNodes: nodes.filter(node => node.source === 'ai').length,
     meanBodyChars: health.meanBodyChars,
     distinctOpenFields: health.distinctOpenFields,
-    projection: state.projection,
+    reminders: records.filter(record => record.verdict === undefined).length,
+    projection,
   }
 }
 

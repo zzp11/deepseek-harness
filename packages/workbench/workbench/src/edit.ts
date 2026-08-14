@@ -73,16 +73,38 @@ export type EditRequest =
   | { readonly op: 'delete-body'; readonly nodeId: NodeId; readonly bodyId: BodyId }
   /** Open a card's idea area, creating its `idea` root the first time. */
   | { readonly op: 'open-ideas'; readonly nodeId: NodeId }
+  /** Record which card the person is on. Costs no `rev`; stamps later utterances. */
+  | { readonly op: 'focus'; readonly nodeId: NodeId | null }
+
+/**
+ * Every operation the edit channel accepts, keyed so the compiler proves the set is
+ * complete: adding a branch to {@link EditRequest} without listing it here is a type
+ * error, which is what keeps {@link EDIT_OPS} from drifting behind the union.
+ */
+const EDIT_OP_SET: Readonly<Record<EditRequest['op'], true>> = {
+  'create-child': true,
+  'update-field': true,
+  rename: true,
+  move: true,
+  delete: true,
+  promote: true,
+  'promote-to-constraint': true,
+  'accept-proposal': true,
+  'reject-proposal': true,
+  'set-tmp': true,
+  'commit-tmp': true,
+  'discard-tmp': true,
+  'delete-body': true,
+  'open-ideas': true,
+  focus: true,
+}
 
 /**
  * Every operation the edit channel accepts. The command handler checks an incoming
  * line against this before planning, which is what makes {@link planEdit}'s final
  * branch unreachable from the wire rather than merely unlikely.
  */
-export const EDIT_OPS: readonly EditRequest['op'][] = [
-  'create-child', 'update-field', 'rename', 'move', 'delete', 'promote', 'promote-to-constraint',
-  'accept-proposal', 'reject-proposal', 'set-tmp', 'commit-tmp', 'discard-tmp', 'delete-body', 'open-ideas',
-]
+export const EDIT_OPS: readonly EditRequest['op'][] = Object.keys(EDIT_OP_SET) as EditRequest['op'][]
 
 /** The skeleton slots `update-field` may write; the others have their own op. */
 export const EDITABLE_SKELETON_FIELDS: readonly string[] = ['body', 'duty']
@@ -161,6 +183,8 @@ export function planEdit(state: WorkbenchState, request: EditRequest, clock: Edi
       return planDeleteBody(state, request.nodeId, request.bodyId)
     case 'open-ideas':
       return planOpenIdeas(state, request.nodeId, clock)
+    case 'focus':
+      return planFocus(state, request.nodeId)
     default:
       // Reachable only from a request that crossed a wire without validation,
       // which the command handler rejects before planning.
@@ -364,6 +388,21 @@ function planScratch(state: WorkbenchState, nodeId: NodeId, tmp: NodeTmp | null)
     ok: true,
     rev: state.meta.rev,
     events: [{ type: 'workbench/scratch', data: { nodeId, tmp } }],
+    invalidation: [],
+    advisories: [],
+  }
+}
+
+/**
+ * Record which card the person is on. No node changes and no `rev`: this is where
+ * they are, not what they wrote.
+ */
+function planFocus(state: WorkbenchState, nodeId: NodeId | null): EditPlan {
+  if (nodeId !== null && !state.nodes.has(nodeId)) return refuseRequest(`节点 ${nodeId} 不存在`)
+  return {
+    ok: true,
+    rev: state.meta.rev,
+    events: [{ type: 'workbench/focus', data: { nodeId } }],
     invalidation: [],
     advisories: [],
   }

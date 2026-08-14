@@ -45,9 +45,14 @@ function run(state: WorkbenchState, request: EditRequest): WorkbenchState {
 }
 
 describe('the accepted operation set', () => {
-  it('lists every branch the request union carries, so an unknown op never reaches planning', () => {
-    expect(EDIT_OPS).toHaveLength(14)
+  it('names each op once, and every planEdit branch is reachable through it', () => {
     expect(new Set(EDIT_OPS).size).toBe(EDIT_OPS.length)
+    // Completeness is the compiler's job (EDIT_OP_SET is keyed by the union), so
+    // what is worth asserting here is that each listed op actually plans.
+    const state = stateWith(['n1', { bodies: [brief('b1')] }])
+    for (const op of EDIT_OPS) {
+      expect(() => planEdit(state, { op } as EditRequest, clock())).not.toThrow()
+    }
   })
 })
 
@@ -121,6 +126,29 @@ describe('edit state', () => {
     const state = stateWith(['n1', { bodies: [brief('b1')] }])
     const plan = planEdit(state, { op: 'commit-tmp', nodeId: NodeId('n1') }, clock())
     expect(plan.ok).toBe(false)
+  })
+})
+
+describe('recording where the person is', () => {
+  it('costs no rev and writes one focus event', () => {
+    const state = stateWith(['n1', { bodies: [brief('b1')] }])
+    const plan = planEdit(state, { op: 'focus', nodeId: NodeId('n1') }, clock())
+    expect(plan.ok && plan.rev).toBe(1)
+    expect(plan.ok && plan.events).toEqual([{ type: 'workbench/focus', data: { nodeId: NodeId('n1') } }])
+  })
+
+  it('accepts leaving every card, and refuses a card that is not there', () => {
+    const state = stateWith(['n1', { bodies: [brief('b1')] }])
+    expect(planEdit(state, { op: 'focus', nodeId: null }, clock()).ok).toBe(true)
+    expect(planEdit(state, { op: 'focus', nodeId: NodeId('ghost') }, clock()).ok).toBe(false)
+  })
+
+  it('is what the projection reports as the current focus', () => {
+    let state = stateWith(['n1', { bodies: [brief('b1')] }])
+    state = run(state, { op: 'focus', nodeId: NodeId('n1') })
+    expect(state.focus).toBe(NodeId('n1'))
+    state = run(state, { op: 'focus', nodeId: null })
+    expect(state.focus).toBeNull()
   })
 })
 

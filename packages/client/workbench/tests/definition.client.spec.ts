@@ -118,13 +118,13 @@ describe('treeRows', () => {
     expect(treeRows(projection).map(row => row.node.id)).toEqual(['orphan'])
   })
 
-  it('carries each row its shape candidates, computed by the host code', () => {
+  it('carries each row what it contains and what waits below it, computed by the host code', () => {
     const projection = fold([
       anchor,
       change(node('root'), 1),
       change(node('a', { parent: 'root' as never, body: '正文' }), 2),
     ]).projection
-    expect(treeRows(projection).map(row => row.shapes)).toEqual([['child-list'], ['paragraph-card']])
+    expect(treeRows(projection).map(row => [row.contains, row.reminders])).toEqual([[1, 0], [0, 0]])
   })
 })
 

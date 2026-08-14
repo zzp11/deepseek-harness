@@ -184,6 +184,8 @@ export type FirstLayerEntry = {
   readonly entryId: SourceId
   /** The person's words, carried in unchanged. */
   readonly text: string
+  /** The card that was focused when they said it; absent when nothing was. */
+  readonly moduleId?: NodeId
   /** The global `rev` current when this entry was appended. */
   readonly rev: number
   readonly createdAt: number
