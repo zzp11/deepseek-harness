@@ -1,0 +1,9 @@
+- text: ○
+- heading "内部技术沙龙" [level=2]
+- text: thought rev 1 person
+- button "简介"
+- button "⁄全局约束"
+- button "Edit this card"
+- button "Commit to this"
+- button "Reject"
+- button "⋯"

@@ -1,0 +1,10 @@
+- navigation "Where this sits":
+  - button "内部技术沙龙"
+- text: ○
+- heading "场地与时间" [level=2]
+- text: thought rev 2 person
+- button "简介"
+- button "Edit this card"
+- button "Commit to this"
+- button "Reject"
+- button "⋯"

@@ -53,6 +53,7 @@ function node(id: string, overrides: Partial<WorkbenchNode> = {}): WorkbenchNode
     parent: null,
     maturity: 'thought',
     source: 'human',
+    duty: '管这块',
     fields: {},
     bodies: [brief(`${id}-brief`)],
     lastRev: 1,

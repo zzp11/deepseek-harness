@@ -65,6 +65,11 @@ describe('create-child', () => {
       maturity: 'thought',
       source: 'human',
       fields: {},
+      // Born with its brief: it is the duty carrier, so the place to write the duty
+      // exists from the card's first moment rather than after a second round.
+      bodies: [{
+        id: 'newb1', label: '简介', source: 'human', lastRev: 5, kind: 'brief', duty: '', body: '正文',
+      }],
       lastRev: 5,
       createdAt: 1000,
       body: '正文',

@@ -147,8 +147,13 @@ describe('the browser half', () => {
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const face = injectedFace(b.slots)
 
-    await face.setTmp('n1' as NodeId, { title: '改了一半', at: 5 })
-    expect(lastRequest(b.execute)).toEqual({ op: 'set-tmp', nodeId: 'n1', tmp: { title: '改了一半', at: 5 } })
+    // No `at`: the stamp is the host's, so the browser cannot put a time in the log.
+    await face.setTmp('n1' as NodeId, { title: '改了一半' })
+    expect(lastRequest(b.execute)).toEqual({ op: 'set-tmp', nodeId: 'n1', tmp: { title: '改了一半' } })
+
+    // An empty draft is how a person opens edit state on an already-committed card.
+    await face.setTmp('n1' as NodeId, {})
+    expect(lastRequest(b.execute)).toEqual({ op: 'set-tmp', nodeId: 'n1', tmp: {} })
 
     await face.commitTmp('n1' as NodeId)
     expect(lastRequest(b.execute)).toEqual({ op: 'commit-tmp', nodeId: 'n1' })

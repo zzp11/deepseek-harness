@@ -128,6 +128,7 @@ export function WorkbenchTab({
                 onToggleForm={(bodyId) => { actions.toggleForm(bodyId) }}
                 onAnchor={(bodyId, objectId, label) => { actions.anchorTo({ bodyId, objectId, label }) }}
                 onEnter={(nodeId) => { actions.select(nodeId) }}
+                onOpenEdit={() => { run(setTmp(card.node.id, {})) }}
                 onCommit={() => { run(commitTmp(card.node.id)) }}
                 onDiscard={() => { run(discardTmp(card.node.id)) }}
                 onPromote={() => { run(promote(card.node.id, 'committed')) }}

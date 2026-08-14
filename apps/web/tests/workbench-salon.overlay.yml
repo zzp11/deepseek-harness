@@ -1,0 +1,16 @@
+# The 工作台 lane inserts both halves of the workbench seam into the shipped Web
+# surface. Both rows belong in the overlay: client-modules' node half scans the
+# Loader's entries, and a row inserted here is one (see my_docs/04 D-01). The
+# only repository touch either needs is the dependency already declared in
+# packages/bundle/web-app/package.json, because a bare row name resolves through
+# the profile's healed node_modules fallback.
+#
+# No model row is patched and no replay fixture is passed: this scenario is the
+# HUMAN write path end to end, so a stray model stream must fail loud rather than
+# be quietly answered.
+- insert:
+    - id: workbench
+      name: '@deepseek-ai/dsh-workbench'
+
+    - id: workbench-client
+      name: '@deepseek-ai/dsh-client-workbench'

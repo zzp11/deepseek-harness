@@ -46,12 +46,25 @@ function node(id: string, overrides: Partial<WorkbenchNode> = {}): WorkbenchNode
     parent: null,
     maturity: 'thought',
     source: 'human',
+    duty: '管这块',
     fields: {},
     bodies: [brief(`${id}-brief`)],
     lastRev: 1,
     createdAt: 0,
     ...overrides,
   }
+}
+
+/** A constraint entry nobody has written a duty for, so the band shows the title alone. */
+function bareDuty2(id: string, parent: string, title: string): WorkbenchNode {
+  const { duty: _duty, ...rest } = node(id, { parent: parent as never, title })
+  return rest
+}
+
+/** A node with no duty at all, which is what a card looks like before anyone writes one. */
+function bareDuty(id: string, prose: string): WorkbenchNode {
+  const { duty: _duty, ...rest } = node(id, { body: prose })
+  return rest
 }
 
 /** One session event as the fold receives it. */
@@ -159,7 +172,9 @@ describe('the tag strip', () => {
 
 describe('the content bodies', () => {
   it('sets the duty apart from the prose, and omits the line when there is no duty', () => {
-    setup(view([change(node('root', { bodies: [brief('b1', '', '只有正文')] }), 1)]))
+    // The brief renders the NODE's duty, so a card with none omits the line even
+    // though the stored brief still carries a (blank) copy of it.
+    setup(view([change(bareDuty('root', '只有正文'), 1)]))
     expect(screen.queryByText(/^职责：/)).toBeNull()
     expect(screen.getByText('只有正文')).toBeDefined()
   })
@@ -469,6 +484,22 @@ describe('the auxiliaries', () => {
     expect(screen.getByRole('button', { name: '模型加的表' })).toBeDefined()
   })
 
+  it('opens edit state on a committed card, which is where a person’s own edit starts', () => {
+    const { setTmp } = setup(view([change(node('root', { maturity: 'committed' }), 1)]))
+    fireEvent.click(screen.getByRole('button', { name: zh['card.edit'] }))
+    // An empty draft: what the person types next is what fills it, and the time is
+    // the host's to stamp.
+    expect(setTmp).toHaveBeenCalledWith('root', {})
+  })
+
+  it('offers no second way in while the card is already in edit state', () => {
+    setup(view([
+      change(node('root'), 1),
+      event('workbench/scratch', { nodeId: 'root', tmp: { at: 0 } }, 2),
+    ]))
+    expect(screen.queryByRole('button', { name: zh['card.edit'] })).toBeNull()
+  })
+
   it('edits the brief in place while the card is in edit state', () => {
     const { setTmp } = setup(view([
       change(node('root'), 1),
@@ -476,6 +507,8 @@ describe('the auxiliaries', () => {
     ]))
     fireEvent.change(screen.getByLabelText(zh['card.duty']), { target: { value: '管场地和排期' } })
     expect(setTmp).toHaveBeenCalledWith('root', expect.objectContaining({ duty: '管场地和排期' }))
+    // The edit state's own text is what shows, not the committed body's.
+    expect(screen.getByLabelText(zh['card.duty'])).toHaveProperty('value', '管这块')
     fireEvent.change(screen.getByLabelText(zh['card.body']), { target: { value: '换了一段' } })
     expect(setTmp).toHaveBeenCalledWith('root', expect.objectContaining({ body: '换了一段' }))
   })
@@ -549,7 +582,7 @@ describe('the left column', () => {
     setup(view([
       change(node('root'), 1),
       change(node('G-', { title: '全局约束', parent: 'root' as never }), 2),
-      change(node('c1', { parent: 'G-' as never, title: '不超预算' }), 3),
+      change(bareDuty2('c1', 'G-', '不超预算'), 3),
     ]))
     fireEvent.click(screen.getAllByRole('button', { name: /不超预算/ })[0] as HTMLElement)
     expect(screen.getByRole('heading', { name: '不超预算' })).toBeDefined()

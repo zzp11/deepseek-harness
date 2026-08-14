@@ -51,7 +51,13 @@ export function buildCardView(projection: WorkbenchState, nodeId: NodeId): CardV
     key: body.id,
     label: body.label === '' ? AUTHORED_FALLBACK[body.kind] ?? body.kind : body.label,
     stale: stale.has(body.id),
-    body,
+    // The brief renders the NODE's duty and body. Those are the fields the gates,
+    // the dependency sets, and the prompt read; the brief's own copy is written at
+    // the commit point for a log reader's benefit and is never read back here, so a
+    // desync cannot reach the screen.
+    body: body.kind === 'brief'
+      ? { ...body, duty: node.duty ?? '', body: node.body ?? '' }
+      : body,
   }))
   const derived: TagEntry[] = derivedViews(projection, records, nodeId).map(view => ({
     kind: 'derived',

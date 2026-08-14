@@ -47,6 +47,8 @@ export interface CardProps {
   readonly onToggleForm: (bodyId: BodyId) => void
   readonly onAnchor: (bodyId: BodyId, objectId: string, label: string) => void
   readonly onEnter: (nodeId: NodeId) => void
+  /** Open edit state on a card that is already committed. */
+  readonly onOpenEdit: () => void
   readonly onCommit: () => void
   readonly onDiscard: () => void
   readonly onPromote: () => void
@@ -213,6 +215,9 @@ export function Card(props: CardProps): React.JSX.Element {
         {view.blocking.length === 0
           ? null
           : <span className={styles.warn}>{t('card.blocking', { n: String(view.blocking.length) })}</span>}
+        {editing ? null : (
+          <Button variant="ghost" size="sm" onClick={props.onOpenEdit}>{t('card.edit')}</Button>
+        )}
         <Button variant="ghost" size="sm" onClick={props.onPromote} disabled={view.node.maturity === 'committed'}>
           {t('card.promote')}
         </Button>

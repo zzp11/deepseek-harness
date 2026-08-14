@@ -59,10 +59,11 @@ describe('the accepted operation set', () => {
 describe('edit state', () => {
   it('costs no rev and leaves the card alone', () => {
     const state = stateWith(['n1', { bodies: [brief('b1')] }])
-    const plan = planEdit(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '半成品', at: 9 } }, clock())
+    const plan = planEdit(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '半成品' } }, clock())
     expect(plan.ok && plan.rev).toBe(1)
+    // `at` is this process's stamp, not the caller's: the request carried none.
     expect(plan.ok && plan.events).toEqual([
-      { type: 'workbench/scratch', data: { nodeId: NodeId('n1'), tmp: { title: '半成品', at: 9 } } },
+      { type: 'workbench/scratch', data: { nodeId: NodeId('n1'), tmp: { title: '半成品', at: 111 } } },
     ])
   })
 
@@ -73,7 +74,7 @@ describe('edit state', () => {
 
   it('lands on 确定 as one commit, one rev, and clears itself', () => {
     let state = stateWith(['n1', { bodies: [brief('b1')] }])
-    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '定稿', body: '新正文', at: 9 } })
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '定稿', body: '新正文' } })
     expect(state.meta.rev).toBe(1)
     state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
     expect(state.meta.rev).toBe(2)
@@ -87,7 +88,7 @@ describe('edit state', () => {
     state = run(state, {
       op: 'set-tmp',
       nodeId: NodeId('n1'),
-      tmp: { bodies: [brief('b1', 1), { ...brief('b2', 1), label: '流程图' }], at: 9 },
+      tmp: { bodies: [brief('b1', 1), { ...brief('b2', 1), label: '流程图' }] },
     })
     state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
     expect(state.nodes.get(NodeId('n1'))?.bodies?.map(body => body.lastRev)).toEqual([2, 2])
@@ -95,14 +96,14 @@ describe('edit state', () => {
 
   it('turns the source to a person, because 确定 is the person committing', () => {
     let state = stateWith(['n1', { source: 'ai', bodies: [brief('b1')] }])
-    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '我改的', at: 9 } })
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '我改的' } })
     state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
     expect(state.nodes.get(NodeId('n1'))?.source).toBe('human')
   })
 
   it('drops on 丢弃 without touching the committed card', () => {
     let state = stateWith(['n1', { bodies: [brief('b1')] }])
-    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '不要了', at: 9 } })
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '不要了' } })
     state = run(state, { op: 'discard-tmp', nodeId: NodeId('n1') })
     expect(state.tmp.has(NodeId('n1'))).toBe(false)
     expect(state.nodes.get(NodeId('n1'))?.title).toBe('title-n1')
@@ -117,9 +118,39 @@ describe('edit state', () => {
 
   it('carries every slot the edit state names, duty included', () => {
     let state = stateWith(['n1', { bodies: [brief('b1')] }])
-    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { duty: '新职责', at: 9 } })
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { duty: '新职责' } })
     state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
     expect(state.nodes.get(NodeId('n1'))?.duty).toBe('新职责')
+  })
+
+  it('carries the committed duty and body into the brief, at the commit point', () => {
+    let state = stateWith(['n1', { bodies: [brief('b1')] }])
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { duty: '管这块', body: '新正文' } })
+    state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
+    const landed = state.nodes.get(NodeId('n1'))?.bodies?.[0]
+    expect(landed?.kind === 'brief' && landed.duty).toBe('管这块')
+    expect(landed?.kind === 'brief' && landed.body).toBe('新正文')
+  })
+
+  it('blanks the brief when the node carries no duty or body of its own', () => {
+    // The brief is a copy of the node's fields, so "nothing written yet" reads as
+    // empty rather than as whatever an earlier draft happened to leave there.
+    const stale: AuthoredBody = {
+      id: BodyId('b1'), label: '简介', source: 'human', lastRev: 1, kind: 'brief', duty: '旧的', body: '旧正文',
+    }
+    let state = stateWith(['n1', { bodies: [stale] }])
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '只改标题' } })
+    state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
+    const landed = state.nodes.get(NodeId('n1'))?.bodies?.[0]
+    expect(landed?.kind === 'brief' && landed.duty).toBe('')
+  })
+
+  it('commits a card that has no content bodies at all, from a log written earlier', () => {
+    let state = stateWith(['n1', {}])
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { title: '改名' } })
+    state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1') })
+    expect(state.nodes.get(NodeId('n1'))?.title).toBe('改名')
+    expect(state.nodes.get(NodeId('n1'))?.bodies).toBeUndefined()
   })
 
   it('refuses 确定 when nothing is pending', () => {

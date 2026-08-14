@@ -141,6 +141,13 @@ export interface NodeTmp {
   readonly at: number
 }
 
+/**
+ * An edit-state write as it crosses a wire. `at` is absent because it is the
+ * receiving process's stamp: a browser clock that is wrong, or lying, must not be
+ * able to put a time into the log.
+ */
+export type TmpDraft = Omit<NodeTmp, 'at'>
+
 /** The skeleton fields every node carries, independent of its open fields. */
 export interface NodeFields {
   /** Says the point in one line. */

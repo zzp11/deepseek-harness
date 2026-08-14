@@ -4,7 +4,7 @@ import type { PropsLocale, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   AuthoredBody, BodyId, ContentBodyKind, DependencyItem, DerivedView, DerivedViewKind, FirstLayerEntry, GateFinding,
-  NodeId, NodeTmp, ProposalId, SubmoduleMapItem, WorkbenchNode, WorkbenchProposal, WorkbenchState,
+  NodeId, NodeTmp, ProposalId, SubmoduleMapItem, TmpDraft, WorkbenchNode, WorkbenchProposal, WorkbenchState,
 } from '@deepseek-ai/dsh-workbench/projection'
 import type { createWorkbenchStore } from './store.ts'
 
@@ -118,8 +118,12 @@ export interface WorkbenchInjected {
   ) => Promise<EditOutcome>
   /** Turn a draft down, keeping the reason. */
   rejectProposal: (proposalId: ProposalId, reason: string) => Promise<EditOutcome>
-  /** Write a card's edit state. Costs no `rev`. */
-  setTmp: (nodeId: NodeId, tmp: NodeTmp) => Promise<EditOutcome>
+  /**
+   * Write a card's edit state. Costs no `rev`. An empty draft opens edit state on a
+   * card that is already committed, which is how a person starts editing by hand.
+   * `at` is the host's stamp, so it is not part of what crosses the wire.
+   */
+  setTmp: (nodeId: NodeId, tmp: TmpDraft) => Promise<EditOutcome>
   /** 确定: fold the edit state into the card as one commit. */
   commitTmp: (nodeId: NodeId) => Promise<EditOutcome>
   /** 丢弃: drop the edit state. */
@@ -148,5 +152,5 @@ export type WorkbenchPaneProps = PropsStore<ReturnType<typeof createWorkbenchSto
 /** Re-exported so components need no second import path for the projection types. */
 export type {
   AuthoredBody, BodyId, ContentBodyKind, DependencyItem, DerivedView, DerivedViewKind, FirstLayerEntry, GateFinding,
-  NodeId, NodeTmp, ProposalId, SubmoduleMapItem, WorkbenchNode, WorkbenchProposal,
+  NodeId, NodeTmp, ProposalId, SubmoduleMapItem, TmpDraft, WorkbenchNode, WorkbenchProposal,
 }

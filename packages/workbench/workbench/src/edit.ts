@@ -21,7 +21,8 @@ import type { ProposedBody, ProposedField, WorkbenchNodeChange } from './events.
 import { blockingFindings, gateReason, runNodeGates, type GateFinding } from './gates.ts'
 import {
   GLOBAL_CONSTRAINT_ROOT_ID,
-  type AuthoredBody, type Maturity, type NodeField, type NodeTmp, type WorkbenchNode,
+  REQUIRED_BODY_KIND,
+  type AuthoredBody, type Maturity, type NodeField, type TmpDraft, type WorkbenchNode,
 } from './model.ts'
 import type { WorkbenchEvent, WorkbenchState } from './store.ts'
 
@@ -63,8 +64,13 @@ export type EditRequest =
   /**
    * Write a card's edit state. Costs no `rev` and touches no node — this is what
    * the person has typed, not what they have committed.
+   *
+   * `tmp.at` carries whatever the caller sent and is DISCARDED: the stamp comes
+   * from this process's clock, so a browser with a wrong clock cannot write a time
+   * into the log. An empty draft is legal and is how a person opens edit state on a
+   * card that is already committed.
    */
-  | { readonly op: 'set-tmp'; readonly nodeId: NodeId; readonly tmp: NodeTmp }
+  | { readonly op: 'set-tmp'; readonly nodeId: NodeId; readonly tmp: TmpDraft }
   /** 确定: fold the edit state into the card as one commit, then clear it. */
   | { readonly op: 'commit-tmp'; readonly nodeId: NodeId }
   /** 丢弃: drop the edit state, leaving the committed card untouched. */
@@ -174,9 +180,9 @@ export function planEdit(state: WorkbenchState, request: EditRequest, clock: Edi
     case 'reject-proposal':
       return planRejectProposal(state, request.proposalId, request.reason)
     case 'set-tmp':
-      return planScratch(state, request.nodeId, request.tmp)
+      return planScratch(state, request.nodeId, request.tmp, clock)
     case 'discard-tmp':
-      return planScratch(state, request.nodeId, null)
+      return planScratch(state, request.nodeId, null, clock)
     case 'commit-tmp':
       return planCommitTmp(state, request.nodeId)
     case 'delete-body':
@@ -288,6 +294,7 @@ function planCreateChild(
   request: Extract<EditRequest, { op: 'create-child' }>,
   clock: EditClock,
 ): EditPlan {
+  const rev = nextRev(state.meta)
   return commitNodes(state, [{
     id: clock.nodeId(),
     title: request.title,
@@ -295,7 +302,19 @@ function planCreateChild(
     maturity: 'thought',
     source: 'human',
     fields: {},
-    lastRev: nextRev(state.meta),
+    // Born with its brief. Every module's bodies include one (§2.2 — it is the
+    // duty carrier), and creating it here is what makes the tag, and therefore the
+    // place to write the duty, exist from the card's first moment.
+    bodies: [{
+      id: clock.bodyId(),
+      label: '简介',
+      source: 'human',
+      lastRev: rev,
+      kind: 'brief',
+      duty: '',
+      body: request.body ?? '',
+    }],
+    lastRev: rev,
     createdAt: clock.now(),
     ...request.body === undefined ? {} : { body: request.body },
   }], 'create')
@@ -382,12 +401,12 @@ function constraintRoot(createdAt: number): WorkbenchNode {
  * The returned plan reports the CURRENT `rev` rather than a next one, which is the
  * honest answer — nothing committed.
  */
-function planScratch(state: WorkbenchState, nodeId: NodeId, tmp: NodeTmp | null): EditPlan {
+function planScratch(state: WorkbenchState, nodeId: NodeId, tmp: TmpDraft | null, clock: EditClock): EditPlan {
   if (!state.nodes.has(nodeId)) return refuseRequest(`节点 ${nodeId} 不存在`)
   return {
     ok: true,
     rev: state.meta.rev,
-    events: [{ type: 'workbench/scratch', data: { nodeId, tmp } }],
+    events: [{ type: 'workbench/scratch', data: { nodeId, tmp: tmp === null ? null : { ...tmp, at: clock.now() } } }],
     invalidation: [],
     advisories: [],
   }
@@ -422,13 +441,38 @@ function planCommitTmp(state: WorkbenchState, nodeId: NodeId): EditPlan {
   if (node === undefined) return refuseRequest(`节点 ${nodeId} 不存在`)
   const tmp = state.tmp.get(nodeId)
   if (tmp === undefined) return refuseRequest(`节点 ${nodeId} 没有待提交的改动`)
-  return commitNodes(state, [humanTouched({
+  const rev = nextRev(state.meta)
+  const committed = {
     ...node,
     ...tmp.title === undefined ? {} : { title: tmp.title },
     ...tmp.duty === undefined ? {} : { duty: tmp.duty },
     ...tmp.body === undefined ? {} : { body: tmp.body },
-    ...tmp.bodies === undefined ? {} : { bodies: tmp.bodies.map(body => ({ ...body, lastRev: nextRev(state.meta) })) },
-  })], 'update')
+    ...tmp.bodies === undefined ? {} : { bodies: tmp.bodies.map(body => ({ ...body, lastRev: rev })) },
+  }
+  return commitNodes(state, [humanTouched(syncBrief(committed, rev))], 'update')
+}
+
+/**
+ * Carry the node's `duty` and `body` into its brief, at the commit point.
+ *
+ * The node's fields are the authority — the gates, the dependency sets, and the
+ * prompt all read them, and the card renders the brief FROM them, so nothing on
+ * screen can show a stale copy. The brief's own payload is written here so a log
+ * reader and a model reading the card's bodies see the same words; it is never read
+ * back as truth. `lastRev` moves with the text, which is what staleness compares.
+ * @param node - the node as this commit would land it.
+ * @param rev - the rev this commit lands at.
+ * @returns the node with its brief in step.
+ */
+function syncBrief(node: WorkbenchNode, rev: number): WorkbenchNode {
+  const bodies = node.bodies
+  if (bodies === undefined) return node
+  return {
+    ...node,
+    bodies: bodies.map(body => body.kind !== 'brief'
+      ? body
+      : { ...body, lastRev: rev, duty: node.duty ?? '', body: node.body ?? '' }),
+  }
 }
 
 /**
@@ -478,6 +522,11 @@ function planOpenIdeas(state: WorkbenchState, nodeId: NodeId, clock: EditClock):
  *
  * In-place replacement is what makes "draw me a flow chart, and bring the brief
  * along" one commit instead of an add plus a delete the person has to notice.
+ *
+ * A proposed brief always replaces the existing one whether or not it says so. There
+ * is exactly one brief per card — it is the duty carrier — so appending a second
+ * would put two 简介 tags on the strip with no way to tell which one the duty came
+ * from, and the model has no reason to know the id it must name.
  */
 function mergeBodies(
   existing: readonly AuthoredBody[],
@@ -488,7 +537,9 @@ function mergeBodies(
   const merged = [...existing]
   for (const body of offered) {
     const landed: AuthoredBody = { id: mintId(), label: body.label, source: 'ai', lastRev: rev, ...body.payload }
-    const replaced = body.replaces
+    const replaced = body.replaces ?? (body.payload.kind === REQUIRED_BODY_KIND
+      ? merged.find(item => item.kind === REQUIRED_BODY_KIND)?.id
+      : undefined)
     const at = replaced === undefined ? -1 : merged.findIndex(item => item.id === replaced)
     // `at >= 0` means a body with exactly that id is there, so the id to keep is
     // `replaced` itself — no second read of the slot, and nothing to fall back to.
