@@ -26,6 +26,22 @@ Accepting a proposal re-runs the gates over what the person edited, not over wha
 
 Custom session events never reach a model request, so a person's words travel twice: as the `user/message` the model reads, and as the `workbench/utterance` the tree cites. The mirror is the only producer of first-hand entries, which is what lets "every message has exactly one entry" be an invariant instead of a hope — this package's `./invariant` asserts it as each entry lands, so a skipped mirror surfaces at the next one.
 
+## Content bodies: authored, or derived
+
+A card's content is a list of bodies. An **authored** body has its own truth, is stored on the node, and can go stale: `brief`, `table`, `flow`, `argument`. A **derived** view is computed per read from the tree and never stored: the submodule map, the relation graph, the global-constraint list, the idea area, and a chart.
+
+The split is enforced in the type system rather than by a test: `BodyPayload` has no variant for any `DerivedViewKind`, so a derived view is not representable as stored content. `derivedViews()` answers with the views themselves rather than their kinds, so a caller never has to handle "I was told this exists but cannot build it".
+
+A chart is derived, not authored, and its criterion is strict: a table column qualifies only when every cell matches `/^-?\d+(?:\.\d+)?$/`. Letting a model write a chart would leave the numbers with no checkable source, and one wrong cell draws a bar that looks entirely normal. When nothing qualifies, the view is absent rather than empty.
+
+`brief` is required and cannot be deleted, because `duty` is what stands in for a module's body in the global skeleton. A card is created with one, `duty` and `body` live on the node (where the gates, the dependency sets, and the prompt read them), and `syncBrief` copies them into the brief at the commit point for a log reader and a model reading `bodies` — never read back as truth. A proposed brief replaces the existing one whether or not it says so.
+
+## Edit state, and the region an idea lives in
+
+`workbench/scratch` carries a card's uncommitted edit state so it survives a reload and a change of machine. It never moves `rev`, and it is kept OUT of `WorkbenchNode` — a separate `NodeGraph.tmp` table — so the type the injection path receives has no such field and leaking an uncommitted draft into a model request is unwritable. `at` is stamped from this process's clock; the wire type omits it, so a browser cannot write a time into the log. An empty draft opens edit state on an already-committed card, which is how a person starts editing by hand.
+
+A node with `region: 'idea'` roots an idea area. One rule governs visibility: an idea is visible only from a vantage enclosed by every idea root that encloses it — so a parent cannot see it, a sibling cannot, and neither can the card's own submodules. `renderSkeletonIndex` filters by vantage, which is the one place an idea could otherwise reach a model request.
+
 ## Model Experience
 
 ### Tool schema
@@ -93,7 +109,8 @@ Append-only; results follow the reusable request prefix.
 
 ## Known Limitations and Deferred Work
 
-- **No model-facing surface yet** — the model has no way to read the tree or propose against it, so a proposal can only reach the log from a test or another plugin.
+- **`⚠` staleness answers "which is older", not "do these contradict"** — `staleBodies` compares `lastRev`, and the real check is a model sweep this stage does not run. A mark that over-reports is visible; a missing check is silent.
+- **`workbench/scratch` cannot be marked `ignorable`** — the envelope defines the marker but `Session.append` exposes no way to set it, so this required-on-read member is refused by a build that does not know it. It would qualify, and the constraint that keeps that true is that a commit carries the whole committed node rather than a reference to the edit state.
 - **A checkpoint grows with the first-hand layer** — `workbench/snapshot` carries the whole projection, first-hand entries included, because a checkpoint without them would let a cold start skip the prefix holding the entries the tree's fields cite. That is what caps the usable session length until a projection backend replaces whole-value checkpoints.
 - **One-hop invalidation only, and nobody consumes it** — `invalidate` answers with direct children, or with everything outside the constraint area when a constraint changed. The tree index is deliberately not an edge, so a rename puts nothing in doubt.
 - **A node carrying only a title has no shape candidate** — which is the state a freshly proposed node is in, so the browser has to render the empty case.
