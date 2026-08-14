@@ -13,7 +13,7 @@
 
 import type { NodeId } from './brand.ts'
 import { children, isRegisteredField } from './core.ts'
-import type { NodeGraph, WorkbenchNode } from './model.ts'
+import { REQUIRED_BODY_KIND, type NodeGraph, type WorkbenchNode } from './model.ts'
 
 /** Which gate produced a finding. */
 export type GateCode =
@@ -23,6 +23,7 @@ export type GateCode =
   | 'GATE_CYCLE'
   | 'GATE_NO_REASON'
   | 'GATE_MISSING_DUTY'
+  | 'GATE_REQUIRED_BODY'
 
 /** One gate's verdict on one write. */
 export interface GateFinding {
@@ -162,6 +163,32 @@ export function gateReason(note: string | undefined): GateFinding[] {
 }
 
 /**
+ * Every card keeps its brief. It is the `duty` carrier, and `duty` is what stands
+ * in for a module's body in the global skeleton — a card that loses it goes silent
+ * to every other module's dependency set, which is a failure with no symptom at the
+ * card itself.
+ *
+ * Applies everywhere, the thought region included: this is not friction about
+ * polish, it is the difference between a card other work can see and one it cannot.
+ *
+ * The distinction that matters is absent versus emptied. A card whose `bodies` is
+ * absent has not been set up yet and passes; a card carrying an EMPTY list has been
+ * emptied, and refusing that is what stops the brief from being removed by deleting
+ * bodies until it is the last one left.
+ * @param node - the node as it will stand after the write.
+ * @returns the findings, empty when the card still has a brief.
+ */
+export function gateRequiredBody(node: WorkbenchNode): GateFinding[] {
+  if (node.bodies === undefined) return []
+  if (node.bodies.some(body => body.kind === REQUIRED_BODY_KIND)) return []
+  return [{
+    code: 'GATE_REQUIRED_BODY',
+    blocking: true,
+    message: '卡片必须保留「简介」内容体：它承载职责，删了这张卡对别的模块就不可见了',
+  }]
+}
+
+/**
  * Run every gate that judges a node write.
  * @param graph - the read model the node is being written into.
  * @param node - the node as it will stand after the write.
@@ -174,6 +201,7 @@ export function runNodeGates(graph: NodeGraph, node: WorkbenchNode, context: Gat
     ...gateNoCycle(graph, node),
     ...gateRegisteredFields(graph, node),
     ...gateEvidence(node),
+    ...gateRequiredBody(node),
     ...gateDuty(graph, node, context),
   ]
 }

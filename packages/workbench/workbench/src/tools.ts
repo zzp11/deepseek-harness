@@ -10,11 +10,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Session } from '@deepseek-ai/dsh-session'
-import { NodeId, ProposalId, SourceId } from './brand.ts'
+import { BodyId, BodyObjectId, NodeId, ProposalId, SourceId } from './brand.ts'
 import { ensureCheckpoint } from './checkpoint.ts'
 import { dependencySet, expand, requireNode, treeIndexSet } from './core.ts'
 import { blockingFindings, gateDuty, gateEvidence, gateRegisteredFields, type GateFinding } from './gates.ts'
-import type { ProposedField, ProposedNode } from './events.ts'
+import type { ProposedBody, ProposedField, ProposedNode } from './events.ts'
 import {
   presentCheckPromotionCall, presentProposeCall, presentReadNodesCall, readOnlyConcurrency,
 } from './present.ts'
@@ -137,11 +137,52 @@ export function registerWorkbenchTools(ctx: Context, projectionOf: ProjectionRes
     isConcurrencySafe: readOnlyConcurrency,
   }))
 
+  /**
+ * Schema of one proposed content body. The payload is one of the authored kinds;
+ * a derived view is deliberately absent — the model cannot offer a submodule map or
+ * a chart, because those are computed from the tree and offering one would be a
+ * second source for a fact that already has one.
+ */
+  const PROPOSED_BODY_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      label: { type: 'string', required: true, description: 'tag 条上显示的名字，两到四个字。' },
+      replaces: { type: 'string', description: '要替换掉的内容体 id。改一份已有内容体时填它，不填就是新增。' },
+      kind: {
+        type: 'string',
+        required: true,
+        enum: ['brief', 'table', 'flow', 'argument'],
+        description: 'brief 简介文档（每张卡必有一个）｜table 表格｜flow 流程图｜argument 论证图。',
+      },
+      duty: { type: 'string', description: 'kind=brief：这张卡管什么、不管什么，一两句。' },
+      body: { type: 'string', description: 'kind=brief：展开的正文。' },
+      columns: { type: 'array', description: 'kind=table：列名。', items: { type: 'string' } },
+      rows: {
+        type: 'array',
+        description: 'kind=table：每行的单元格，顺序与 columns 一致。某一列每格都是纯数字时，图表会自动可用。',
+        items: { type: 'array', items: { type: 'string' } },
+      },
+      steps: {
+        type: 'array',
+        description: 'kind=flow：按顺序的步骤。',
+        items: { type: 'string' },
+      },
+      stance: { type: 'string', description: 'kind=argument：立场。' },
+      grounds: {
+        type: 'array',
+        description: 'kind=argument：论据；以「反：」开头的表示反对这个立场。',
+        items: { type: 'string' },
+      },
+    },
+  } as const
+
   ctx.tools.register(defineTool({
     name: PROPOSE_TOOL,
     description:
       '提一份草稿。这是你唯一的写路径，草稿不进本体：人会看、可能就地改、然后采纳或不要。'
-      + '可以给一个已有节点补正文和字段，也可以提一批新节点（冷启动时的候选骨架）。'
+      + '可以给一个已有节点补正文、字段和内容体，也可以提一批新节点（冷启动时的候选骨架）。'
+      + '一个模块通常需要不止一种形式才说得清：简介文档是必有的那一份，另外可以给流程图、表格、论证图。'
       + '闸门当场校验，过不了会返回缺什么而不是记下一份落不了地的草稿。',
     parameters: {
       title: { type: 'string', required: true, description: '一行说清这份草稿是什么。' },
@@ -149,6 +190,13 @@ export function registerWorkbenchTools(ctx: Context, projectionOf: ProjectionRes
       summary: { type: 'string', description: '给人看的一句话摘要。' },
       body: { type: 'string', description: '给 targetNode 的正文。' },
       fields: { type: 'array', description: '给 targetNode 提的字段。', items: PROPOSED_FIELD_SCHEMA },
+      bodies: {
+        type: 'array',
+        description:
+          '给 targetNode 的内容体。复杂的东西用多种形式说清楚是应该的，一次可以提好几个；'
+          + '改已有的那份就填它的 replaces。',
+        items: PROPOSED_BODY_SCHEMA,
+      },
       newNodes: {
         type: 'array',
         description: '提议新建的节点。parent 留空就挂在 targetNode 下（targetNode 也为空则挂到根）。',
@@ -161,6 +209,7 @@ export function registerWorkbenchTools(ctx: Context, projectionOf: ProjectionRes
             duty: { type: 'string', description: '这个节点管什么。有子节点的节点晋升时必须有。' },
             body: { type: 'string' },
             fields: { type: 'array', items: PROPOSED_FIELD_SCHEMA },
+            bodies: { type: 'array', items: PROPOSED_BODY_SCHEMA },
           },
         },
       },
@@ -197,7 +246,13 @@ export function registerWorkbenchTools(ctx: Context, projectionOf: ProjectionRes
       const session = sessionOf(exec)
       const state = projectionOf(session)
       const draft = readDraft(args)
-      const plan = planProposal(state, draft, {
+      if (!draft.ok) {
+        return Promise.resolve({
+          kind: 'blocked' as const,
+          findings: [{ code: 'GATE_MALFORMED_BODY', message: draft.message }],
+        })
+      }
+      const plan = planProposal(state, draft.draft, {
         proposalId: () => ProposalId(`p${String(session.seq)}`),
         now: () => Date.now(),
       })
@@ -263,6 +318,102 @@ export function registerWorkbenchTools(ctx: Context, projectionOf: ProjectionRes
   }))
 }
 
+
+/** One body read off the tool arguments, or the message naming what is missing. */
+type BodyRead =
+  | { readonly ok: true; readonly body: ProposedBody }
+  | { readonly ok: false; readonly message: string }
+
+/** Every body read off the tool arguments, or the first problem found. */
+type BodiesRead =
+  | { readonly ok: true; readonly bodies: ProposedBody[] }
+  | { readonly ok: false; readonly message: string }
+
+/** One content body as the tool receives it: flat, with the fields of one kind filled. */
+interface RawBody {
+  label: string
+  replaces?: string
+  kind: 'brief' | 'table' | 'flow' | 'argument'
+  duty?: string
+  body?: string
+  columns?: readonly string[]
+  rows?: readonly (readonly string[])[]
+  steps?: readonly string[]
+  stance?: string
+  grounds?: readonly string[]
+}
+
+/**
+ * Read one proposed body off the tool arguments, refusing a payload that does not
+ * match the kind it claims.
+ *
+ * The tool surface is flat because a JSON-schema union is awkward for a model to
+ * fill, so the pairing of `kind` with its own fields is checked here — a model/tool
+ * JSON boundary, where a wrong combination must be refused rather than coerced into
+ * an empty body that would look like a deliberate blank.
+ *
+ * Object ids are minted per body version. An anchor cites `(bodyId, objectId)` and
+ * stays valid until the body is replaced, which is exactly when its target may have
+ * ceased to exist.
+ * @param raw - the body as the tool received it.
+ * @returns the proposed body, or a message naming what is missing.
+ */
+function readBody(raw: RawBody): BodyRead {
+  const head = { label: raw.label, ...raw.replaces === undefined ? {} : { replaces: BodyId(raw.replaces) } }
+  switch (raw.kind) {
+    case 'brief':
+      if (raw.duty === undefined || raw.body === undefined) {
+        return { ok: false, message: `内容体「${raw.label}」是 brief，必须同时给 duty 与 body` }
+      }
+      return { ok: true, body: { ...head, payload: { kind: 'brief', duty: raw.duty, body: raw.body } } }
+    case 'table': {
+      if (raw.columns === undefined || raw.rows === undefined) {
+        return { ok: false, message: `内容体「${raw.label}」是 table，必须同时给 columns 与 rows` }
+      }
+      const rows = raw.rows.map((cells, index) => ({ rowId: BodyObjectId(`r${String(index)}`), cells: [...cells] }))
+      return { ok: true, body: { ...head, payload: { kind: 'table', columns: [...raw.columns], rows } } }
+    }
+    case 'flow': {
+      if (raw.steps === undefined) return { ok: false, message: `内容体「${raw.label}」是 flow，必须给 steps` }
+      const steps = raw.steps.map((text, index) => ({ stepId: BodyObjectId(`s${String(index)}`), text }))
+      return { ok: true, body: { ...head, payload: { kind: 'flow', steps } } }
+    }
+    case 'argument': {
+      if (raw.stance === undefined || raw.grounds === undefined) {
+        return { ok: false, message: `内容体「${raw.label}」是 argument，必须同时给 stance 与 grounds` }
+      }
+      const grounds = raw.grounds.map((text, index) => ({
+        groundId: BodyObjectId(`g${String(index)}`),
+        text: text.replace(/^反：/, ''),
+        ...text.startsWith('反：') ? { opposes: true as const } : {},
+      }))
+      return { ok: true, body: { ...head, payload: { kind: 'argument', stance: raw.stance, grounds } } }
+    }
+    // defineTool validates arguments against the schema and throws ToolArgsError
+    // before execute runs, so a kind outside the enum cannot reach this arm through
+    // the tool. It stays because this function is the payload-validation boundary
+    // and a caller need not arrive through that schema.
+    /* v8 ignore next 2 -- unreachable through the schema-validated tool surface */
+    default:
+      return { ok: false, message: `内容体「${raw.label}」的 kind 不认识` }
+  }
+}
+
+/**
+ * Read every proposed body, stopping at the first malformed one.
+ * @param raw - the bodies as the tool received them.
+ * @returns the bodies, or the message naming the first problem.
+ */
+function readBodies(raw: readonly RawBody[]): BodiesRead {
+  const bodies: ProposedBody[] = []
+  for (const item of raw) {
+    const read = readBody(item)
+    if (!read.ok) return read
+    bodies.push(read.body)
+  }
+  return { ok: true, bodies }
+}
+
 /** Read the tool arguments into a draft, branding the ids they carry. */
 function readDraft(args: {
   title: string
@@ -270,30 +421,40 @@ function readDraft(args: {
   summary?: string
   body?: string
   fields?: readonly { name: string; value: string; sourceId?: string }[]
+  bodies?: readonly RawBody[]
   newNodes?: readonly {
     title: string
     parent?: string
     duty?: string
     body?: string
     fields?: readonly { name: string; value: string; sourceId?: string }[]
+    bodies?: readonly RawBody[]
   }[]
-}): ProposalDraft {
-  return {
+}): { readonly ok: true; readonly draft: ProposalDraft } | { readonly ok: false; readonly message: string } {
+  const own = readBodies(args.bodies ?? [])
+  if (!own.ok) return own
+  const created: ProposedNode[] = []
+  for (const proposed of args.newNodes ?? []) {
+    const bodies = readBodies(proposed.bodies ?? [])
+    if (!bodies.ok) return bodies
+    created.push({
+      title: proposed.title,
+      ...proposed.parent === undefined ? {} : { parent: NodeId(proposed.parent) },
+      ...proposed.duty === undefined ? {} : { duty: proposed.duty },
+      ...proposed.body === undefined ? {} : { body: proposed.body },
+      ...proposed.fields === undefined ? {} : { fields: proposed.fields.map(readField) },
+      ...bodies.bodies.length === 0 ? {} : { bodies: bodies.bodies },
+    })
+  }
+  return { ok: true, draft: {
     targetNode: args.targetNode === undefined ? null : NodeId(args.targetNode),
     title: args.title,
     ...args.summary === undefined ? {} : { summary: args.summary },
     ...args.body === undefined ? {} : { body: args.body },
     ...args.fields === undefined ? {} : { fields: args.fields.map(readField) },
-    ...args.newNodes === undefined ? {} : {
-      newNodes: args.newNodes.map((proposed): ProposedNode => ({
-        title: proposed.title,
-        ...proposed.parent === undefined ? {} : { parent: NodeId(proposed.parent) },
-        ...proposed.duty === undefined ? {} : { duty: proposed.duty },
-        ...proposed.body === undefined ? {} : { body: proposed.body },
-        ...proposed.fields === undefined ? {} : { fields: proposed.fields.map(readField) },
-      })),
-    },
-  }
+    ...own.bodies.length === 0 ? {} : { bodies: own.bodies },
+    ...created.length === 0 ? {} : { newNodes: created },
+  } }
 }
 
 /** Brand one proposed field's citation. */

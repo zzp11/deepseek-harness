@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NodeId, ProposalId, SourceId } from '../src/brand.ts'
+import { BodyId, BodyObjectId, NodeId, ProposalId, SourceId } from '../src/brand.ts'
 import {
   ancestors, children, citedSourceIds, constraints, dependencySet, expand, invalidate, isConstraint,
   isRegisteredField, nextRev, renderNodeDuty, renderNodeFully, renderSkeletonIndex, requireNode,
@@ -13,6 +13,8 @@ describe('branded ids', () => {
     expect(NodeId('n1')).toBe('n1')
     expect(SourceId('s1')).toBe('s1')
     expect(ProposalId('p1')).toBe('p1')
+    expect(BodyId('b1')).toBe('b1')
+    expect(BodyObjectId('o1')).toBe('o1')
   })
 })
 
@@ -302,6 +304,6 @@ describe('rendering', () => {
 
   it('indexes the tree one node per line', () => {
     const graph = graphOf([node('a', { title: '甲', maturity: 'idea' }), node('b', { title: '乙', maturity: 'rejected' })])
-    expect(renderSkeletonIndex(graph)).toBe('a 甲 想法\nb 乙 已否决')
+    expect(renderSkeletonIndex(graph, null)).toBe('a 甲 想法\nb 乙 已否决')
   })
 })

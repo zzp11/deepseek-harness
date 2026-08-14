@@ -9,10 +9,12 @@
  * @module @deepseek-ai/dsh-workbench/core
  */
 
-import type { NodeId, SourceId } from './brand.ts'
+import { NodeId, type BodyId, type SourceId } from './brand.ts'
 import {
-  GLOBAL_CONSTRAINT_ROOT_ID, MATURITY_LABELS, SKELETON_FIELD_NAMES, SKELETON_ITEM_ID,
-  type DependencyItem, type NodeGraph, type NodeSource, type Shape, type WorkbenchMeta, type WorkbenchNode,
+  GLOBAL_CONSTRAINT_ROOT_ID, MATURITY_LABELS, NUMERIC_CELL, SKELETON_FIELD_NAMES, SKELETON_ITEM_ID,
+  type AuthoredBody, type ChartPoint, type DependencyItem, type DerivedView, type DerivedViewKind, type NodeGraph,
+  type NodeSource, type PendingProposal, type RelationEdge, type Shape, type SubmoduleMapItem, type WorkbenchMeta,
+  type WorkbenchNode,
 } from './model.ts'
 
 /**
@@ -128,7 +130,7 @@ export function dependencySet(graph: NodeGraph, nodeId: NodeId): DependencyItem[
     kind: 'skeleton',
     id: SKELETON_ITEM_ID,
     rev: graph.meta.rev,
-    content: renderSkeletonIndex(graph),
+    content: renderSkeletonIndex(graph, nodeId),
   })
   return items
 }
@@ -152,7 +154,7 @@ export function treeIndexSet(graph: NodeGraph): DependencyItem[] {
       rev: constraint.lastRev,
       content: renderNodeFully(constraint),
     })),
-    { kind: 'skeleton', id: SKELETON_ITEM_ID, rev: graph.meta.rev, content: renderSkeletonIndex(graph) },
+    { kind: 'skeleton', id: SKELETON_ITEM_ID, rev: graph.meta.rev, content: renderSkeletonIndex(graph, null) },
   ]
 }
 
@@ -235,6 +237,258 @@ export function shapeCandidates(graph: NodeGraph, nodeId: NodeId): Shape[] {
   const node = requireNode(graph, nodeId)
   if (children(graph, nodeId).length > 0) return ['child-list']
   return (node.body ?? '') === '' ? [] : ['paragraph-card']
+}
+
+
+/**
+ * The idea-area roots enclosing a node, outermost first, including the node itself
+ * when it is a root. A node in the main region encloses none.
+ * @param graph - the read model.
+ * @param nodeId - the node to locate.
+ * @returns the enclosing idea roots.
+ */
+export function ideaRoots(graph: NodeGraph, nodeId: NodeId): NodeId[] {
+  const chain = [...ancestors(graph, nodeId), requireNode(graph, nodeId)]
+  return chain.filter(node => node.region === 'idea').map(node => node.id)
+}
+
+/**
+ * Whether a node is visible while working from another one.
+ *
+ * One rule, no exceptions: a node is visible when every idea area enclosing it
+ * also encloses the vantage point. So an idea is invisible to the module it hangs
+ * under, to that module's siblings, and — the case worth stating because it is the
+ * one people expect to differ — to the module's own submodules. Adoption is what
+ * makes an idea visible, by moving its content into the main region.
+ *
+ * `from` of `null` is the cold-start vantage: nothing is focused, so only the main
+ * region is visible.
+ * @param graph - the read model.
+ * @param from - the node being worked from, or `null` at cold start.
+ * @param nodeId - the node whose visibility is asked about.
+ * @returns true when the node may be read from that vantage.
+ */
+export function visibleFrom(graph: NodeGraph, from: NodeId | null, nodeId: NodeId): boolean {
+  const enclosing = ideaRoots(graph, nodeId)
+  if (enclosing.length === 0) return true
+  if (from === null) return false
+  const vantage = new Set(ideaRoots(graph, from))
+  return enclosing.every(root => vantage.has(root))
+}
+
+/**
+ * Every node readable from a vantage point, in graph order.
+ * @param graph - the read model.
+ * @param from - the node being worked from, or `null` at cold start.
+ * @returns the visible nodes.
+ */
+export function visibleNodes(graph: NodeGraph, from: NodeId | null): WorkbenchNode[] {
+  return [...graph.nodes.values()].filter(node => visibleFrom(graph, from, node.id))
+}
+
+/**
+ * Descendants of a node, excluding it, parents before children.
+ * @param graph - the read model.
+ * @param nodeId - the node to walk below.
+ * @returns the descendant nodes.
+ */
+export function descendants(graph: NodeGraph, nodeId: NodeId): WorkbenchNode[] {
+  const below: WorkbenchNode[] = []
+  const frontier: NodeId[] = [nodeId]
+  for (let next = frontier.shift(); next !== undefined; next = frontier.shift()) {
+    for (const child of children(graph, next)) {
+      below.push(child)
+      frontier.push(child.id)
+    }
+  }
+  return below
+}
+
+/**
+ * Unruled proposals at or below a node — the reminder count a card shows, and the
+ * count that bubbles up the parent chain.
+ *
+ * It needs no event of its own. A finished subtask lands as a `workbench/proposal`
+ * and a person reading it lands a `workbench/verdict`, so "how many results are
+ * waiting for me" is already the difference between the two.
+ * @param graph - the read model.
+ * @param proposals - the proposal records of the projection.
+ * @param nodeId - the node to count at.
+ * @returns how many unruled proposals target this node or anything below it.
+ */
+export function pendingProposals(
+  graph: NodeGraph,
+  proposals: Iterable<PendingProposal>,
+  nodeId: NodeId,
+): number {
+  const below = new Set<NodeId>([nodeId, ...descendants(graph, nodeId).map(node => node.id)])
+  let waiting = 0
+  for (const record of proposals) {
+    if (record.verdict !== undefined) continue
+    const target = record.proposal.targetNode
+    if (target !== null && below.has(target)) waiting += 1
+  }
+  return waiting
+}
+
+/**
+ * The nodes most recently committed to, newest first — what the left column pins
+ * as 最近在弄.
+ *
+ * The cap has a reason rather than a taste behind it: working memory holds about
+ * four chunks, so a longer list would be a list nobody reads. Idea areas are left
+ * out because the left column is main-region navigation; ideas are reached through
+ * their card's tag.
+ * @param graph - the read model.
+ * @param limit - how many to keep.
+ * @returns the most recently committed main-region nodes, newest first.
+ */
+export function workingSet(graph: NodeGraph, limit: number): WorkbenchNode[] {
+  return visibleNodes(graph, null)
+    .filter(node => node.id !== GLOBAL_CONSTRAINT_ROOT_ID)
+    .sort((left, right) => right.lastRev - left.lastRev)
+    .slice(0, limit)
+}
+
+/**
+ * The authored bodies of a card that may no longer agree with their siblings —
+ * every body older than the newest one on the same card.
+ *
+ * It answers "which is older", never "do these actually contradict". The real
+ * check is a sweep the model runs, which this stage does not have; a mark that
+ * over-reports is visible, while a missing check is silent.
+ * @param node - the card to measure.
+ * @returns the ids of the bodies that may be stale.
+ */
+export function staleBodies(node: WorkbenchNode): BodyId[] {
+  const bodies = node.bodies ?? []
+  const newest = Math.max(...bodies.map(body => body.lastRev), 0)
+  return bodies.filter(body => body.lastRev < newest).map(body => body.id)
+}
+
+/**
+ * The strictly numeric columns of a table body, by column index.
+ *
+ * Strict on purpose: every cell must be a bare number, so a unit, a currency mark,
+ * or a hedge disqualifies the column. That is what keeps a mis-read cell from
+ * becoming a bar that looks entirely normal — the chart does not become available
+ * at all.
+ * @param body - the table body to inspect.
+ * @returns the indexes of columns whose every cell is a bare number.
+ */
+export function numericColumns(body: AuthoredBody): number[] {
+  if (body.kind !== 'table' || body.rows.length === 0) return []
+  return body.columns.flatMap((_, column) =>
+    body.rows.every(row => NUMERIC_CELL.test(row.cells[column] ?? '')) ? [column] : [])
+}
+
+/**
+ * The chart a table body affords, or `null` when no column qualifies. The first
+ * column supplies the labels, and the first strictly numeric column after it
+ * supplies the values.
+ * @param body - the table body to plot.
+ * @returns the derived chart, or `null`.
+ */
+export function chartOf(body: AuthoredBody): Extract<DerivedView, { kind: 'chart' }> | null {
+  if (body.kind !== 'table') return null
+  const numeric = new Set(numericColumns(body))
+  const plotted = [...body.columns.entries()].find(([index]) => index > 0 && numeric.has(index))
+  if (plotted === undefined) return null
+  const [column, axis] = plotted
+  const points: ChartPoint[] = body.rows.map((row) => {
+    const label = row.cells[0]
+    const value = row.cells[column]
+    /* v8 ignore next -- numericColumns already refused any column with a missing cell, so both reads resolve here */
+    if (label === undefined || value === undefined) throw new Error(`workbench: table ${body.id} has a short row`)
+    return { label, value: Number(value) }
+  })
+  return { kind: 'chart', source: body.id, axis, points }
+}
+
+/**
+ * The submodule map of a card: its children, one level only, each with how much it
+ * contains and how many results wait below it.
+ *
+ * One level is a screen budget, not a simplification. Nesting three levels of card
+ * inside one column leaves the third too narrow to read, so depth is reached by
+ * descending rather than by drawing.
+ * @param graph - the read model.
+ * @param proposals - the proposal records, for the reminder counts.
+ * @param nodeId - the card to map under.
+ * @returns one item per child.
+ */
+export function submoduleMap(
+  graph: NodeGraph,
+  proposals: Iterable<PendingProposal>,
+  nodeId: NodeId,
+): SubmoduleMapItem[] {
+  const records = [...proposals]
+  return children(graph, nodeId)
+    .filter(child => child.region !== 'idea')
+    .map(child => ({
+      nodeId: child.id,
+      title: child.title,
+      maturity: child.maturity,
+      contains: descendants(graph, child.id).length,
+      reminders: pendingProposals(graph, records, child.id),
+    }))
+}
+
+/**
+ * The idea area of a card: the cards under its `idea` root, one level, same shape
+ * as the submodule map.
+ * @param graph - the read model.
+ * @param proposals - the proposal records, for the reminder counts.
+ * @param nodeId - the card whose idea area is wanted.
+ * @returns one item per idea card, empty when the card has no idea root yet.
+ */
+export function ideaArea(
+  graph: NodeGraph,
+  proposals: Iterable<PendingProposal>,
+  nodeId: NodeId,
+): SubmoduleMapItem[] {
+  const root = children(graph, nodeId).find(child => child.region === 'idea')
+  return root === undefined ? [] : submoduleMap(graph, proposals, root.id)
+}
+
+/**
+ * The relation edges leaving a card: every open field whose value names another
+ * node that exists.
+ *
+ * A value naming a node that does not exist is not an edge and not an error here —
+ * the dangling-reference gate owns that judgement, and drawing a half edge would
+ * report the same defect twice in two vocabularies.
+ * @param graph - the read model.
+ * @param nodeId - the card to draw from.
+ * @returns the edges, in field order.
+ */
+export function relationEdges(graph: NodeGraph, nodeId: NodeId): RelationEdge[] {
+  const node = requireNode(graph, nodeId)
+  return Object.entries(node.fields).flatMap(([via, field]) => {
+    const target = NodeId(field.value)
+    return graph.nodes.has(target) ? [{ from: node.id, to: target, via }] : []
+  })
+}
+
+/**
+ * Which derived views a card affords right now, in tag-strip order.
+ *
+ * A view that would draw nothing is absent rather than disabled. A disabled tag
+ * reads as "this card could show a chart, you just have not unlocked it", which is
+ * the wrong signal: the honest statement is that nothing on this card supports one.
+ * @param graph - the read model.
+ * @param nodeId - the card to inspect.
+ * @returns the available derived-view kinds.
+ */
+export function derivedViews(graph: NodeGraph, nodeId: NodeId): DerivedViewKind[] {
+  const node = requireNode(graph, nodeId)
+  const kinds: DerivedViewKind[] = []
+  if (children(graph, nodeId).some(child => child.region !== 'idea')) kinds.push('submodule-map')
+  if (relationEdges(graph, nodeId).length > 0) kinds.push('relation')
+  if ((node.bodies ?? []).some(body => chartOf(body) !== null)) kinds.push('chart')
+  if (node.parent === null) kinds.push('constraints')
+  kinds.push('ideas')
+  return kinds
 }
 
 /**
@@ -343,11 +597,16 @@ export function renderNodeDuty(node: WorkbenchNode): string {
 
 /**
  * Render the tree index: one line per node, id, title, and maturity.
+ *
+ * Filtered by vantage, which is the one place idea areas must not leak: an idea
+ * listed in the index would tell the model a card exists that the person has not
+ * confirmed, and the index reaches every dependency set.
  * @param graph - the read model.
+ * @param from - the node being worked from, or `null` at cold start.
  * @returns the rendered index.
  */
-export function renderSkeletonIndex(graph: NodeGraph): string {
-  return [...graph.nodes.values()]
+export function renderSkeletonIndex(graph: NodeGraph, from: NodeId | null): string {
+  return visibleNodes(graph, from)
     .map(node => `${node.id} ${node.title} ${MATURITY_LABELS[node.maturity]}`)
     .join('\n')
 }

@@ -12,8 +12,8 @@
 // Loads the session package so the SessionEventMap augmentation below resolves
 // through its project reference rather than its built declarations.
 import type {} from '@deepseek-ai/dsh-session'
-import type { NodeId, ProposalId, SourceId } from './brand.ts'
-import type { FirstLayerEntry, WorkbenchMeta, WorkbenchNode } from './model.ts'
+import type { BodyId, NodeId, ProposalId, SourceId } from './brand.ts'
+import type { BodyPayload, FirstLayerEntry, NodeTmp, WorkbenchMeta, WorkbenchNode } from './model.ts'
 
 /**
  * A whole-value checkpoint. Cold start replays from the newest one plus the
@@ -33,6 +33,12 @@ export interface WorkbenchSnapshot {
   readonly nodes: readonly WorkbenchNode[]
   readonly firstLayer: readonly FirstLayerEntry[]
   readonly proposals: readonly CheckpointedProposal[]
+  /**
+   * Uncommitted edit state, so a checkpoint does not discard what a person has
+   * typed but not yet committed. Absent in a checkpoint written before edit state
+   * existed, which reads as "no card is in edit state".
+   */
+  readonly tmp?: readonly CheckpointedTmp[]
   readonly meta: WorkbenchMeta
 }
 
@@ -40,6 +46,12 @@ export interface WorkbenchSnapshot {
 export interface CheckpointedProposal {
   readonly proposal: WorkbenchProposal
   readonly verdict?: WorkbenchVerdict
+}
+
+/** One card's uncommitted edit state, as a checkpoint carries it. */
+export interface CheckpointedTmp {
+  readonly nodeId: NodeId
+  readonly tmp: NodeTmp
 }
 
 /** Who wrote a change. `system` is reserved for projections repairing their own bookkeeping. */
@@ -93,6 +105,27 @@ export interface ProposedNode {
   readonly duty?: string
   readonly body?: string
   readonly fields?: readonly ProposedField[]
+  /**
+   * Content bodies to create with the node. A card usually needs more than one
+   * form to say what it is, so one proposal offers them together rather than
+   * costing a round each.
+   */
+  readonly bodies?: readonly ProposedBody[]
+}
+
+/**
+ * One content body a proposal offers. `replaces` names an existing body this one
+ * supersedes: a request to draw a flow chart usually also revises the brief, and
+ * without this the model could only ever add, never bring an existing body along.
+ */
+export interface ProposedBody {
+  readonly label: string
+  /**
+   * The body's content. This is exactly {@link BodyPayload} — the id, the source,
+   * and the `rev` are what the commit adds, never what the model supplies.
+   */
+  readonly payload: BodyPayload
+  readonly replaces?: BodyId
 }
 
 /**
@@ -108,6 +141,12 @@ export interface WorkbenchProposal {
   readonly body?: string
   readonly fields?: readonly ProposedField[]
   readonly newNodes?: readonly ProposedNode[]
+  /**
+   * Content bodies for the target card — added, or replacing one it already has.
+   * This is what lets one request revise the brief and draw a flow chart in the
+   * same round instead of costing one round each.
+   */
+  readonly bodies?: readonly ProposedBody[]
   readonly createdAt: number
 }
 
@@ -127,6 +166,23 @@ export interface WorkbenchVerdict {
   readonly note?: string
 }
 
+/**
+ * A card's uncommitted edit state, written to the log so it survives a reload and
+ * a change of machine.
+ *
+ * It does NOT move `rev`. `rev` means "one commit landed", and the whole staleness
+ * design reads it that way: were a keystroke to advance it, "one commit, one
+ * `rev`" would stop holding and the later invalidation pass would compute an
+ * impact set per keystroke.
+ *
+ * `tmp: null` clears the state — pressing 确定, pressing 丢弃, and committing the
+ * node all end in the same clearing write.
+ */
+export interface WorkbenchScratch {
+  readonly nodeId: NodeId
+  readonly tmp: NodeTmp | null
+}
+
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /** Whole-value checkpoint of the workbench tree, appended on promotion and every configured number of changes. */
@@ -139,5 +195,21 @@ declare module '@deepseek-ai/dsh-session/types' {
     'workbench/proposal': WorkbenchProposal
     /** A person's ruling on one proposal. */
     'workbench/verdict': WorkbenchVerdict
+    /**
+     * One card's uncommitted edit state, or its clearing. Never moves `rev`.
+     *
+     * Required-on-read like every other member, NOT marked `ignorable`: the
+     * envelope defines that marker but `Session.append` exposes no way to set it,
+     * so no producer in this repository writes one. Being required is the safe
+     * default anyway — a reader that does not know this type refuses the log
+     * instead of silently resuming without it.
+     *
+     * It would nonetheless QUALIFY as ignorable, and that is a standing constraint
+     * rather than an observation: skipping these rebuilds the committed tree byte
+     * for byte, because the `workbench/node-change` a commit emits carries the
+     * whole committed node instead of citing the edit state it came from. A commit
+     * that recorded only a reference to the edit state would break that property.
+     */
+    'workbench/scratch': WorkbenchScratch
   }
 }

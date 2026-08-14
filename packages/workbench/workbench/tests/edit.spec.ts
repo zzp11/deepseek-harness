@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NodeId, ProposalId, SourceId } from '../src/brand.ts'
+import { BodyId, NodeId, ProposalId, SourceId } from '../src/brand.ts'
 import { planEdit, type EditClock, type EditPlan, type EditRequest } from '../src/edit.ts'
 import { GLOBAL_CONSTRAINT_ROOT_ID, type WorkbenchNode } from '../src/model.ts'
 import {
@@ -10,7 +10,11 @@ import { node, utterance } from './fixtures.ts'
 /** A deterministic clock, so a plan's ids and timestamps are assertable. */
 function clockFrom(prefix = 'new'): EditClock {
   let minted = 0
-  return { nodeId: () => NodeId(`${prefix}${String(minted++)}`), now: () => 1000 }
+  return {
+    nodeId: () => NodeId(`${prefix}${String(minted++)}`),
+    bodyId: () => BodyId(`${prefix}b${String(minted++)}`),
+    now: () => 1000,
+  }
 }
 
 /** A projection seeded with nodes, first-hand entries, and a field dictionary. */

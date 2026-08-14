@@ -15,11 +15,14 @@
  * @module @deepseek-ai/dsh-workbench/edit
  */
 
-import type { NodeId, ProposalId, SourceId } from './brand.ts'
-import { invalidate, nextRev } from './core.ts'
-import type { ProposedField, WorkbenchNodeChange } from './events.ts'
+import type { BodyId, NodeId, ProposalId, SourceId } from './brand.ts'
+import { children, invalidate, nextRev } from './core.ts'
+import type { ProposedBody, ProposedField, WorkbenchNodeChange } from './events.ts'
 import { blockingFindings, gateReason, runNodeGates, type GateFinding } from './gates.ts'
-import { GLOBAL_CONSTRAINT_ROOT_ID, type Maturity, type NodeField, type WorkbenchNode } from './model.ts'
+import {
+  GLOBAL_CONSTRAINT_ROOT_ID,
+  type AuthoredBody, type Maturity, type NodeField, type NodeTmp, type WorkbenchNode,
+} from './model.ts'
 import type { WorkbenchEvent, WorkbenchState } from './store.ts'
 
 /**
@@ -57,6 +60,29 @@ export type EditRequest =
     readonly keptNodes?: readonly { readonly index: number; readonly title?: string }[]
   }
   | { readonly op: 'reject-proposal'; readonly proposalId: ProposalId; readonly reason: string }
+  /**
+   * Write a card's edit state. Costs no `rev` and touches no node — this is what
+   * the person has typed, not what they have committed.
+   */
+  | { readonly op: 'set-tmp'; readonly nodeId: NodeId; readonly tmp: NodeTmp }
+  /** 确定: fold the edit state into the card as one commit, then clear it. */
+  | { readonly op: 'commit-tmp'; readonly nodeId: NodeId }
+  /** 丢弃: drop the edit state, leaving the committed card untouched. */
+  | { readonly op: 'discard-tmp'; readonly nodeId: NodeId }
+  /** Remove one authored body. Immediate and free; the brief cannot go. */
+  | { readonly op: 'delete-body'; readonly nodeId: NodeId; readonly bodyId: BodyId }
+  /** Open a card's idea area, creating its `idea` root the first time. */
+  | { readonly op: 'open-ideas'; readonly nodeId: NodeId }
+
+/**
+ * Every operation the edit channel accepts. The command handler checks an incoming
+ * line against this before planning, which is what makes {@link planEdit}'s final
+ * branch unreachable from the wire rather than merely unlikely.
+ */
+export const EDIT_OPS: readonly EditRequest['op'][] = [
+  'create-child', 'update-field', 'rename', 'move', 'delete', 'promote', 'promote-to-constraint',
+  'accept-proposal', 'reject-proposal', 'set-tmp', 'commit-tmp', 'discard-tmp', 'delete-body', 'open-ideas',
+]
 
 /** The skeleton slots `update-field` may write; the others have their own op. */
 export const EDITABLE_SKELETON_FIELDS: readonly string[] = ['body', 'duty']
@@ -89,6 +115,8 @@ export type EditPlan =
 export interface EditClock {
   /** A fresh node id, unique within the session log. */
   nodeId: () => NodeId
+  /** A fresh content-body id, unique within the session log. */
+  bodyId: () => BodyId
   /** Wall clock, for a created node's `createdAt`. */
   now: () => number
 }
@@ -123,6 +151,16 @@ export function planEdit(state: WorkbenchState, request: EditRequest, clock: Edi
       return planAcceptProposal(state, request, clock)
     case 'reject-proposal':
       return planRejectProposal(state, request.proposalId, request.reason)
+    case 'set-tmp':
+      return planScratch(state, request.nodeId, request.tmp)
+    case 'discard-tmp':
+      return planScratch(state, request.nodeId, null)
+    case 'commit-tmp':
+      return planCommitTmp(state, request.nodeId)
+    case 'delete-body':
+      return planDeleteBody(state, request.nodeId, request.bodyId)
+    case 'open-ideas':
+      return planOpenIdeas(state, request.nodeId, clock)
     default:
       // Reachable only from a request that crossed a wire without validation,
       // which the command handler rejects before planning.
@@ -310,6 +348,117 @@ function constraintRoot(createdAt: number): WorkbenchNode {
   }
 }
 
+
+/**
+ * Plan a write to a card's edit state. It emits one `workbench/scratch` and
+ * nothing else: no node changes, no `rev` step, no gates. Gating happens at 确定,
+ * because refusing keystrokes would make the edit state unusable while a draft is
+ * legitimately half-finished.
+ *
+ * The returned plan reports the CURRENT `rev` rather than a next one, which is the
+ * honest answer — nothing committed.
+ */
+function planScratch(state: WorkbenchState, nodeId: NodeId, tmp: NodeTmp | null): EditPlan {
+  if (!state.nodes.has(nodeId)) return refuseRequest(`节点 ${nodeId} 不存在`)
+  return {
+    ok: true,
+    rev: state.meta.rev,
+    events: [{ type: 'workbench/scratch', data: { nodeId, tmp } }],
+    invalidation: [],
+    advisories: [],
+  }
+}
+
+/**
+ * 确定: fold a card's edit state into the card as ONE commit.
+ *
+ * The commit carries the whole resulting node, never a reference to the edit state
+ * — which is what lets `workbench/scratch` stay `ignorable`. The projection clears
+ * the edit state when it folds the commit, so no companion clearing event is
+ * needed and a crash between the two cannot leave a card editing over content that
+ * already landed.
+ */
+function planCommitTmp(state: WorkbenchState, nodeId: NodeId): EditPlan {
+  const node = state.nodes.get(nodeId)
+  if (node === undefined) return refuseRequest(`节点 ${nodeId} 不存在`)
+  const tmp = state.tmp.get(nodeId)
+  if (tmp === undefined) return refuseRequest(`节点 ${nodeId} 没有待提交的改动`)
+  return commitNodes(state, [humanTouched({
+    ...node,
+    ...tmp.title === undefined ? {} : { title: tmp.title },
+    ...tmp.duty === undefined ? {} : { duty: tmp.duty },
+    ...tmp.body === undefined ? {} : { body: tmp.body },
+    ...tmp.bodies === undefined ? {} : { bodies: tmp.bodies.map(body => ({ ...body, lastRev: nextRev(state.meta) })) },
+  })], 'update')
+}
+
+/**
+ * Remove one authored body. The gates decide whether it may go, which is how the
+ * brief is protected without this function knowing why it matters.
+ */
+function planDeleteBody(state: WorkbenchState, nodeId: NodeId, bodyId: BodyId): EditPlan {
+  const node = state.nodes.get(nodeId)
+  if (node === undefined) return refuseRequest(`节点 ${nodeId} 不存在`)
+  const bodies = node.bodies ?? []
+  if (!bodies.some(body => body.id === bodyId)) return refuseRequest(`内容体 ${bodyId} 不在这张卡上`)
+  return commitNodes(state, [humanTouched({ ...node, bodies: bodies.filter(body => body.id !== bodyId) })], 'update')
+}
+
+/**
+ * Open a card's idea area. Every card has one conceptually; its root node is
+ * created the first time someone looks, so a tree of untouched cards does not pay
+ * for an empty area each.
+ *
+ * The root is `committed` and carries a duty, because it is structure rather than
+ * content — leaving it in the thought region would put a gate finding on scaffolding
+ * nobody wrote.
+ */
+function planOpenIdeas(state: WorkbenchState, nodeId: NodeId, clock: EditClock): EditPlan {
+  const node = state.nodes.get(nodeId)
+  if (node === undefined) return refuseRequest(`节点 ${nodeId} 不存在`)
+  const existing = children(state, nodeId).find(child => child.region === 'idea')
+  if (existing !== undefined) return refuseRequest(`节点 ${nodeId} 的想法区已经开过了`)
+  return commitNodes(state, [{
+    id: clock.nodeId(),
+    title: `${node.title}·想法`,
+    parent: nodeId,
+    duty: '这里放未确认、未落地的想法；对这张卡以外的一切不可见',
+    maturity: 'committed',
+    source: 'human',
+    region: 'idea',
+    fields: {},
+    lastRev: nextRev(state.meta),
+    createdAt: clock.now(),
+  }], 'create')
+}
+
+/**
+ * Fold proposed bodies onto a card's existing ones: a proposal that names
+ * `replaces` supersedes that body in place, keeping tag order stable, and one that
+ * does not is appended.
+ *
+ * In-place replacement is what makes "draw me a flow chart, and bring the brief
+ * along" one commit instead of an add plus a delete the person has to notice.
+ */
+function mergeBodies(
+  existing: readonly AuthoredBody[],
+  offered: readonly ProposedBody[],
+  rev: number,
+  mintId: () => BodyId,
+): readonly AuthoredBody[] {
+  const merged = [...existing]
+  for (const body of offered) {
+    const landed: AuthoredBody = { id: mintId(), label: body.label, source: 'ai', lastRev: rev, ...body.payload }
+    const replaced = body.replaces
+    const at = replaced === undefined ? -1 : merged.findIndex(item => item.id === replaced)
+    // `at >= 0` means a body with exactly that id is there, so the id to keep is
+    // `replaced` itself — no second read of the slot, and nothing to fall back to.
+    if (at < 0) merged.push(landed)
+    else merged.splice(at, 1, { ...landed, id: replaced as BodyId })
+  }
+  return merged
+}
+
 /**
  * Plan accepting a proposal: apply the person's edits to the draft, then run the
  * gates over the result. Re-running them on the edited content is the point —
@@ -333,10 +482,14 @@ function planAcceptProposal(
   if (proposal.targetNode !== null) {
     const target = state.nodes.get(proposal.targetNode)
     if (target === undefined) return refuseRequest(`草稿指向的节点 ${proposal.targetNode} 不存在`)
+    const offeredBodies = proposal.bodies ?? []
     candidates.push({
       ...target,
       fields: { ...target.fields, ...merged },
       ...proposal.body === undefined ? {} : { body: proposal.body },
+      ...offeredBodies.length === 0
+        ? {}
+        : { bodies: mergeBodies(target.bodies ?? [], offeredBodies, nextRev(state.meta), clock.bodyId) },
     })
   } else if (Object.keys(merged).length > 0) {
     return refuseRequest('草稿没有目标节点，字段无处可落')
@@ -358,6 +511,9 @@ function planAcceptProposal(
       createdAt: clock.now(),
       ...proposed.duty === undefined ? {} : { duty: proposed.duty },
       ...proposed.body === undefined ? {} : { body: proposed.body },
+      ...proposed.bodies === undefined
+        ? {}
+        : { bodies: mergeBodies([], proposed.bodies, nextRev(state.meta), clock.bodyId) },
     })
   }
   if (candidates.length === 0) return refuseRequest('这份草稿没有可落盘的内容')

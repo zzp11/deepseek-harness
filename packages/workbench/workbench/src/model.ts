@@ -6,7 +6,7 @@
  * @module @deepseek-ai/dsh-workbench/model
  */
 
-import type { NodeId, SourceId } from './brand.ts'
+import type { BodyId, BodyObjectId, NodeId, ProposalId, SourceId } from './brand.ts'
 
 /**
  * How settled a node is. The value set is closed: adding a rung is a data
@@ -36,6 +36,111 @@ export interface NodeField {
   readonly sourceId?: SourceId
 }
 
+/**
+ * Which region of the tree a node belongs to. `idea` marks the root of one card's
+ * idea area — unconfirmed thoughts that may nest freely and are invisible outside
+ * that area, including to the card's own submodules. Descendants of an `idea` root
+ * are inside it by ancestry and carry `main` themselves; membership is decided by
+ * walking the parent chain, never by copying the mark down.
+ */
+export type NodeRegion = 'main' | 'idea'
+
+/**
+ * A body kind whose content is written down by a person or the model. It has its
+ * own truth, so it is stored, it carries a `lastRev`, and it can go stale against
+ * its siblings.
+ */
+export type AuthoredBodyKind = 'brief' | 'table' | 'flow' | 'argument'
+
+/**
+ * A body kind computed from the tree. It has no truth of its own — every fact in
+ * it is already somewhere else — so it is never stored and can never disagree
+ * with the content it is drawn from.
+ */
+export type DerivedViewKind = 'submodule-map' | 'relation' | 'constraints' | 'ideas' | 'chart'
+
+/** Every body kind a card's tag strip can offer. */
+export type ContentBodyKind = AuthoredBodyKind | DerivedViewKind
+
+/** One step of a flow, addressable so the conversation anchor can cite it. */
+export interface FlowStep {
+  readonly stepId: BodyObjectId
+  readonly text: string
+  /** Steps this one leads to; absent means it leads to the next in order. */
+  readonly next?: readonly BodyObjectId[]
+}
+
+/** One row of a table, addressable for the same reason as {@link FlowStep}. */
+export interface TableRow {
+  readonly rowId: BodyObjectId
+  readonly cells: readonly string[]
+}
+
+/** One ground supporting or opposing a stance. */
+export interface ArgumentGround {
+  readonly groundId: BodyObjectId
+  readonly text: string
+  readonly opposes?: true
+}
+
+/** One plotted value, drawn from a strictly numeric table column. */
+export interface ChartPoint {
+  readonly label: string
+  readonly value: number
+}
+
+/**
+ * What an authored body holds, discriminated by `kind`.
+ *
+ * The discriminant lives here rather than beside it on {@link AuthoredBody} so a
+ * body cannot carry a `kind` that disagrees with its payload. Note that no
+ * variant exists for a {@link DerivedViewKind}: a derived view is not
+ * representable as stored content, which is what keeps §2.1's split from
+ * depending on a test.
+ */
+export type BodyPayload =
+  | { readonly kind: 'brief'; readonly duty: string; readonly body: string }
+  | { readonly kind: 'table'; readonly columns: readonly string[]; readonly rows: readonly TableRow[] }
+  | { readonly kind: 'flow'; readonly steps: readonly FlowStep[] }
+  | { readonly kind: 'argument'; readonly stance: string; readonly grounds: readonly ArgumentGround[] }
+
+/**
+ * One authored content body: what the tag strip selects and the card renders.
+ *
+ * `lastRev` is what makes staleness decidable without fingerprints: a body older
+ * than the newest authored body on the same card may no longer agree with it.
+ */
+export type AuthoredBody = {
+  readonly id: BodyId
+  /** What the tag strip shows. */
+  readonly label: string
+  readonly source: NodeSource
+  /** The global `rev` this body was last committed at. */
+  readonly lastRev: number
+} & BodyPayload
+
+/**
+ * A card's uncommitted edit state — what the person has typed, or what the model
+ * has offered, before anyone pressed 确定.
+ *
+ * It is kept OUT of {@link WorkbenchNode} on purpose. A node reaches the model
+ * through the dependency set, and a `tmp` field hanging off the node would ride
+ * along on every rendering path that walks a node; separated, the type the
+ * injection path receives has no such field, so the leak cannot be written. That
+ * is a stronger guarantee than a test asserting it does not leak.
+ */
+export interface NodeTmp {
+  readonly title?: string
+  readonly duty?: string
+  readonly body?: string
+  /** The card's bodies as they stand uncommitted, whole-value. */
+  readonly bodies?: readonly AuthoredBody[]
+  /** The proposal that opened this edit state, when the model opened it. */
+  readonly fromProposal?: ProposalId
+  /** When this edit state was last written. */
+  readonly at: number
+}
+
 /** The skeleton fields every node carries, independent of its open fields. */
 export interface NodeFields {
   /** Says the point in one line. */
@@ -50,6 +155,13 @@ export interface NodeFields {
   readonly body?: string
   readonly verifyCriteria?: Executability
   readonly action?: Executability
+  /** Which region this node belongs to; absent means {@link NodeRegion} `main`. */
+  readonly region?: NodeRegion
+  /**
+   * The card's authored content bodies, in tag-strip order. Derived views are not
+   * here — they are computed per read.
+   */
+  readonly bodies?: readonly AuthoredBody[]
   /** Fields beyond the skeleton, keyed by name. A name absent from the dictionary is unregistered. */
   readonly fields: Readonly<Record<string, NodeField>>
 }
@@ -92,6 +204,49 @@ export interface FieldDictionaryEntry {
 }
 
 /**
+ * One proposal and whether it has been ruled on — only what a derivation reads.
+ *
+ * It lives here rather than in the projection store because a derivation needs it:
+ * the reminder count a card shows is "unruled proposals at or below me", and
+ * `./core.ts` must not import the store it is consumed by.
+ */
+export interface PendingProposal {
+  readonly proposal: { readonly proposalId: ProposalId; readonly targetNode: NodeId | null }
+  readonly verdict?: unknown
+}
+
+/** One entry of a card's submodule map: a child, and how much it contains. */
+export interface SubmoduleMapItem {
+  readonly nodeId: NodeId
+  readonly title: string
+  readonly maturity: Maturity
+  /** Descendants below this child. The map draws one level; this says what is deeper. */
+  readonly contains: number
+  /** Unruled proposals at or below this child. */
+  readonly reminders: number
+}
+
+/** One edge of a relation graph: an open field on `from` whose value names `to`. */
+export interface RelationEdge {
+  readonly from: NodeId
+  readonly to: NodeId
+  /** The open field whose value named the target. */
+  readonly via: string
+}
+
+/**
+ * A view computed from the tree rather than stored. Discriminated by `kind`, with
+ * no variant reachable from {@link BodyPayload} — the two are disjoint by
+ * construction.
+ */
+export type DerivedView =
+  | { readonly kind: 'submodule-map'; readonly items: readonly SubmoduleMapItem[] }
+  | { readonly kind: 'relation'; readonly edges: readonly RelationEdge[] }
+  | { readonly kind: 'constraints'; readonly items: readonly WorkbenchNode[] }
+  | { readonly kind: 'ideas'; readonly items: readonly SubmoduleMapItem[] }
+  | { readonly kind: 'chart'; readonly source: BodyId; readonly axis: string; readonly points: readonly ChartPoint[] }
+
+/**
  * The whole read model one derivation runs against. Passing it explicitly is
  * what keeps `./core.ts` free of I/O and of any DSH dependency: the projection
  * store builds this, and the tools, the edit channel, and the browser all
@@ -100,6 +255,12 @@ export interface FieldDictionaryEntry {
 export interface NodeGraph {
   readonly nodes: ReadonlyMap<NodeId, WorkbenchNode>
   readonly firstLayer: ReadonlyMap<SourceId, FirstLayerEntry>
+  /**
+   * Uncommitted edit state per node. Present in the read model because the card
+   * restores its edit state from it, and deliberately absent from every
+   * derivation that feeds the model — see {@link NodeTmp}.
+   */
+  readonly tmp: ReadonlyMap<NodeId, NodeTmp>
   readonly meta: WorkbenchMeta
 }
 
@@ -141,8 +302,32 @@ export const SKELETON_ITEM_ID = 'skeleton'
  * is registered only by the dictionary.
  */
 export const SKELETON_FIELD_NAMES: readonly string[] = [
-  'title', 'parent', 'duty', 'maturity', 'source', 'body', 'verifyCriteria', 'action',
+  'title', 'parent', 'duty', 'maturity', 'source', 'body', 'verifyCriteria', 'action', 'region', 'bodies',
 ]
+
+/**
+ * The body kind every card carries, first in the tag strip and never removable.
+ * It is the `duty` carrier, and `duty` is what stands in for a module's body in
+ * the global skeleton — a card without it is invisible to every other module's
+ * dependency set.
+ */
+export const REQUIRED_BODY_KIND = 'brief' satisfies AuthoredBodyKind
+
+/** Body kinds computed per read rather than stored; a card never owns one of these. */
+export const DERIVED_VIEW_KINDS: readonly DerivedViewKind[] = [
+  'submodule-map', 'relation', 'constraints', 'ideas', 'chart',
+]
+
+/**
+ * A table cell that counts as a number.
+ *
+ * Deliberately total and deliberately narrow: a unit suffix, a currency mark, or
+ * a hedge (`8万`, `$0.4`, `约 200`, `100元`) is REFUSED rather than coerced. The
+ * failure being designed out is silent — a mis-parsed cell draws a bar that looks
+ * entirely normal — so the criterion refuses instead of guessing, and the chart
+ * simply does not become available.
+ */
+export const NUMERIC_CELL = /^-?\d+(?:\.\d+)?$/
 
 /** Model-visible label per maturity rung; the model and the person read the same words. */
 export const MATURITY_LABELS: Readonly<Record<Maturity, string>> = {

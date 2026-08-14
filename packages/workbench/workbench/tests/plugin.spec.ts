@@ -8,7 +8,7 @@ import InvariantRegistry from '@deepseek-ai/dsh-invariants'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId, type Session, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import { NodeId, SourceId } from '../src/brand.ts'
+import { ProposalId, NodeId, SourceId } from '../src/brand.ts'
 import * as Workbench from '../src/index.ts'
 import * as WorkbenchInvariant from '../src/invariant.ts'
 import type { EditRequest } from '../src/edit.ts'
@@ -196,6 +196,35 @@ describe('the human write path through the command channel', () => {
     expect(ctx.commands.list(agent).map(command => command.name)).toContain(Workbench.EDIT_COMMAND)
     await fiber.dispose()
     expect(ctx.commands.list(agent).map(command => command.name)).not.toContain(Workbench.EDIT_COMMAND)
+  })
+})
+
+describe('the wire boundary and the ids it mints', () => {
+  it('refuses an operation the edit channel does not have, rather than letting it reach planning', async () => {
+    const { ctx } = await mount()
+    const agent = await agentOn(ctx, 'wire')
+    const answer = await executeLine(ctx, agent, `/${Workbench.EDIT_COMMAND} {"op":"drop-database"}`)
+    expect(answer.kind).toBe('error')
+    expect(workbenchEvents(agent.session, 'workbench/node-change')).toHaveLength(0)
+  })
+
+  it('mints a body id when a draft brings content bodies along', async () => {
+    const { ctx } = await mount()
+    const agent = await agentOn(ctx, 'bodies')
+    await edit(ctx, agent, { op: 'create-child', parentId: null, title: '选题' })
+    const created = workbenchEvents(agent.session, 'workbench/node-change')[0]?.data as WorkbenchNodeChange
+    const proposalId = ProposalId('p-bodies')
+    agent.session.append('workbench/proposal', {
+      proposalId,
+      targetNode: created.node.id,
+      title: '补一份简介',
+      createdAt: 0,
+      bodies: [{ label: '简介', payload: { kind: 'brief', duty: '定每期讲什么', body: '谁想讲谁报' } }],
+    })
+    expect((await edit(ctx, agent, { op: 'accept-proposal', proposalId })).kind).toBe('success')
+    const landed = workbenchEvents(agent.session, 'workbench/node-change').at(-1)?.data as WorkbenchNodeChange
+    expect(landed.node.bodies?.map(body => body.label)).toEqual(['简介'])
+    expect(landed.node.bodies?.[0]?.id).toMatch(/^b\d+-\d+$/)
   })
 })
 

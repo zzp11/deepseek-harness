@@ -13,13 +13,18 @@
 
 import type { NodeId, ProposalId, SourceId } from './brand.ts'
 import type {
-  CheckpointedProposal, WorkbenchNodeChange, WorkbenchProposal, WorkbenchSnapshot, WorkbenchUtterance,
-  WorkbenchVerdict,
+  CheckpointedProposal, CheckpointedTmp, WorkbenchNodeChange, WorkbenchProposal, WorkbenchScratch, WorkbenchSnapshot,
+  WorkbenchUtterance, WorkbenchVerdict,
 } from './events.ts'
-import type { FirstLayerEntry, NodeGraph, WorkbenchMeta, WorkbenchNode } from './model.ts'
+import type {
+  FirstLayerEntry, NodeGraph, NodeTmp, PendingProposal, WorkbenchMeta, WorkbenchNode,
+} from './model.ts'
 
-/** One proposal and its ruling, if a person has already ruled. */
-export interface ProposalRecord {
+/**
+ * One proposal and its ruling as the projection holds it — the whole payloads,
+ * where {@link PendingProposal} carries only what a derivation reads.
+ */
+export interface ProposalRecord extends PendingProposal {
   readonly proposal: WorkbenchProposal
   readonly verdict?: WorkbenchVerdict
 }
@@ -32,6 +37,7 @@ export interface WorkbenchState extends NodeGraph {
   readonly nodes: Map<NodeId, WorkbenchNode>
   readonly firstLayer: Map<SourceId, FirstLayerEntry>
   readonly proposals: Map<ProposalId, ProposalRecord>
+  readonly tmp: Map<NodeId, NodeTmp>
   meta: WorkbenchMeta
   /** `workbench/node-change` events folded since the last checkpoint; the checkpoint trigger reads it. */
   changesSinceSnapshot: number
@@ -44,10 +50,12 @@ export type WorkbenchEvent =
   | { readonly type: 'workbench/utterance'; readonly data: WorkbenchUtterance }
   | { readonly type: 'workbench/proposal'; readonly data: WorkbenchProposal }
   | { readonly type: 'workbench/verdict'; readonly data: WorkbenchVerdict }
+  | { readonly type: 'workbench/scratch'; readonly data: WorkbenchScratch }
 
 /** The event types this projection folds; the session-stream listener filters on it. */
 export const WORKBENCH_EVENT_TYPES: ReadonlySet<string> = new Set<WorkbenchEvent['type']>([
   'workbench/snapshot', 'workbench/node-change', 'workbench/utterance', 'workbench/proposal', 'workbench/verdict',
+  'workbench/scratch',
 ])
 
 /**
@@ -60,6 +68,7 @@ export function emptyWorkbenchState(): WorkbenchState {
     nodes: new Map(),
     firstLayer: new Map(),
     proposals: new Map(),
+    tmp: new Map(),
     meta: { rev: 0, fieldDictionary: {} },
     changesSinceSnapshot: 0,
   }
@@ -78,6 +87,7 @@ export function cloneWorkbenchState(state: WorkbenchState): WorkbenchState {
     nodes: new Map(state.nodes),
     firstLayer: new Map(state.firstLayer),
     proposals: new Map(state.proposals),
+    tmp: new Map(state.tmp),
     meta: state.meta,
     changesSinceSnapshot: state.changesSinceSnapshot,
   }
@@ -109,6 +119,9 @@ export function applyWorkbenchEvent(state: WorkbenchState, event: WorkbenchEvent
       return
     case 'workbench/verdict':
       applyVerdict(state, event.data)
+      return
+    case 'workbench/scratch':
+      applyScratch(state, event.data)
       return
     default:
       // Reachable only from a log carrying a `workbench/*` type this build does
@@ -168,8 +181,14 @@ export function snapshotOf(state: WorkbenchState): WorkbenchSnapshot {
     nodes: [...state.nodes.values()],
     firstLayer: [...state.firstLayer.values()],
     proposals: [...state.proposals.values()].map(toCheckpointedProposal),
+    ...state.tmp.size === 0 ? {} : { tmp: checkpointedTmp(state.tmp) },
     meta: state.meta,
   }
+}
+
+/** Uncommitted edit state as a checkpoint carries it, one entry per card that has some. */
+function checkpointedTmp(tmp: ReadonlyMap<NodeId, NodeTmp>): CheckpointedTmp[] {
+  return [...tmp].map(([nodeId, entry]) => ({ nodeId, tmp: entry }))
 }
 
 /** Drop the record's projection identity, keeping only what a checkpoint carries. */
@@ -187,6 +206,8 @@ function applySnapshot(state: WorkbenchState, data: WorkbenchSnapshot): void {
   for (const entry of data.firstLayer) state.firstLayer.set(entry.entryId, entry)
   state.proposals.clear()
   for (const record of data.proposals) state.proposals.set(record.proposal.proposalId, record)
+  state.tmp.clear()
+  for (const entry of data.tmp ?? []) state.tmp.set(entry.nodeId, entry.tmp)
   state.meta = data.meta
   state.changesSinceSnapshot = 0
 }
@@ -206,8 +227,21 @@ function applyNodeChange(state: WorkbenchState, data: WorkbenchNodeChange): void
   }
   if (data.op === 'delete') state.nodes.delete(data.node.id)
   else state.nodes.set(data.node.id, data.node)
+  // A commit is one of the three ways edit state ends. Clearing it here rather
+  // than requiring a companion scratch event keeps a crash between the two from
+  // leaving a card in edit state over content that already landed.
+  state.tmp.delete(data.node.id)
   state.meta = { ...state.meta, rev: data.rev }
   state.changesSinceSnapshot += 1
+}
+
+/**
+ * Set or clear one card's uncommitted edit state. It touches neither the tree nor
+ * `rev`: this is what the person has typed, not what they have committed.
+ */
+function applyScratch(state: WorkbenchState, data: WorkbenchScratch): void {
+  if (data.tmp === null) state.tmp.delete(data.nodeId)
+  else state.tmp.set(data.nodeId, data.tmp)
 }
 
 /** Append one first-hand entry, refusing to overwrite an id the layer already holds. */

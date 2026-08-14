@@ -956,7 +956,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/node-change': WorkbenchNodeChange
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:135`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:185`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchproposal--log-only"></a>
 
@@ -967,7 +967,28 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/proposal': WorkbenchProposal
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:139`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:189`](../packages/workbench/workbench/src/events.ts)
+
+<a id="workbenchscratch--log-only"></a>
+
+#### `workbench/scratch` — log-only
+
+```ts persistence-catalog
+/**
+ * One card's uncommitted edit state, or its clearing. Never moves `rev`, and
+ * is written with the envelope's `ignorable: true`.
+ *
+ * Ignorable is justified rather than convenient: skipping these rebuilds the
+ * committed tree byte for byte, and no later event depends on one, because the
+ * `workbench/node-change` a commit emits carries the whole committed node
+ * instead of citing the edit state it came from. That is a standing constraint
+ * — a commit that recorded only a reference to the edit state would make this
+ * marker wrong.
+ */
+'workbench/scratch': WorkbenchScratch
+```
+
+来源：[`packages/workbench/workbench/src/events.ts:203`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchsnapshot--log-only"></a>
 
@@ -978,7 +999,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/snapshot': WorkbenchSnapshot
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:133`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:183`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchutterance--log-only"></a>
 
@@ -989,7 +1010,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/utterance': WorkbenchUtterance
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:137`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:187`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchverdict--log-only"></a>
 
@@ -1000,4 +1021,4 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/verdict': WorkbenchVerdict
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:141`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:191`](../packages/workbench/workbench/src/events.ts)

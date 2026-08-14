@@ -35,6 +35,38 @@ export function SourceId(id: string): SourceId {
   return id as SourceId
 }
 
+/** Identifies one authored content body on a card. */
+export type BodyId = Branded<'WorkbenchBodyId'>
+
+/**
+ * Brand a string as a {@link BodyId}.
+ * @param id - the raw body id.
+ * @returns the same string, branded; no validation is performed.
+ */
+export function BodyId(id: string): BodyId {
+  return id as BodyId
+}
+
+/**
+ * Identifies one addressable object inside an authored body — a flow step, a
+ * table row, an argument ground.
+ *
+ * These ids are authored and stored rather than assigned at render time, because
+ * the conversation anchor cites one of them: a render-time index would move when
+ * a step is inserted above it, and the anchor would then silently point at a
+ * different object.
+ */
+export type BodyObjectId = Branded<'WorkbenchBodyObjectId'>
+
+/**
+ * Brand a string as a {@link BodyObjectId}.
+ * @param id - the raw body-object id.
+ * @returns the same string, branded; no validation is performed.
+ */
+export function BodyObjectId(id: string): BodyObjectId {
+  return id as BodyObjectId
+}
+
 /** Identifies one model proposal awaiting a human verdict. */
 export type ProposalId = Branded<'WorkbenchProposalId'>
 

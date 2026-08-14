@@ -18,9 +18,9 @@ import z from '@deepseek-ai/schemastery'
 import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { NodeId, SourceId } from './brand.ts'
+import { BodyId, NodeId, SourceId } from './brand.ts'
 import { ensureCheckpoint } from './checkpoint.ts'
-import { planEdit, type EditClock, type EditRequest } from './edit.ts'
+import { EDIT_OPS, planEdit, type EditClock, type EditRequest } from './edit.ts'
 import { renderFindings } from './gates.ts'
 import type { WorkbenchUtterance } from './events.ts'
 import { WORKBENCH_PROMPT_NAME, WORKBENCH_PROMPT_ORDER, WORKBENCH_SYSTEM_PROMPT } from './prompt.ts'
@@ -220,7 +220,8 @@ export function parseEditRequest(rawInput: string): EditRequest | undefined {
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined
   const request = parsed as { op?: unknown }
-  return typeof request.op === 'string' ? parsed as EditRequest : undefined
+  if (typeof request.op !== 'string') return undefined
+  return (EDIT_OPS as readonly string[]).includes(request.op) ? parsed as EditRequest : undefined
 }
 
 /**
@@ -231,6 +232,7 @@ function sessionClock(session: Session): EditClock {
   let minted = 0
   return {
     nodeId: () => NodeId(`n${String(session.seq)}-${String(minted++)}`),
+    bodyId: () => BodyId(`b${String(session.seq)}-${String(minted++)}`),
     now: () => Date.now(),
   }
 }

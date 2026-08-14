@@ -26,6 +26,7 @@ const EMPTY: WorkbenchTreeView = {
     nodes: new Map(),
     firstLayer: new Map(),
     proposals: new Map(),
+    tmp: new Map(),
     meta: { rev: 0, fieldDictionary: {} },
     changesSinceSnapshot: 0,
   },

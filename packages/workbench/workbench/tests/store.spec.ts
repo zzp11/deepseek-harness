@@ -7,6 +7,7 @@ import {
   shouldSnapshot, snapshotOf,
   type WorkbenchEvent, type WorkbenchState,
 } from '../src/store.ts'
+import type { NodeTmp } from '../src/model.ts'
 import { node, utterance } from './fixtures.ts'
 
 /** A `workbench/node-change` event with the commit values a test does not pin. */
@@ -257,5 +258,60 @@ describe('unknown events', () => {
   it('refuses a workbench type this build does not know', () => {
     expect(() => { applyWorkbenchEvent(emptyWorkbenchState(), { type: 'workbench/future' } as unknown as WorkbenchEvent) })
       .toThrow('workbench: cannot fold event workbench/future')
+  })
+})
+
+describe('uncommitted edit state', () => {
+  /** A `workbench/scratch` event setting or clearing one card's edit state. */
+  function scratch(id: string, tmp: NodeTmp | null): WorkbenchEvent {
+    return { type: 'workbench/scratch', data: { nodeId: NodeId(id), tmp } }
+  }
+
+  it('holds what a person typed without touching the tree or the rev', () => {
+    const state = foldEveryEvent([
+      change({ node: node('n1', { lastRev: 1 }) }),
+      scratch('n1', { title: '改了一半的标题', at: 5 }),
+    ])
+    expect(state.tmp.get(NodeId('n1'))).toEqual({ title: '改了一半的标题', at: 5 })
+    expect(state.nodes.get(NodeId('n1'))?.title).toBe('title-n1')
+    expect(state.meta.rev).toBe(1)
+  })
+
+  it('clears on an explicit null, which is what 确定 and 丢弃 both write', () => {
+    const state = foldEveryEvent([
+      scratch('n1', { title: '半成品', at: 5 }),
+      scratch('n1', null),
+    ])
+    expect(state.tmp.has(NodeId('n1'))).toBe(false)
+  })
+
+  it('clears when the node commits, so a crash cannot leave edit state over landed content', () => {
+    const state = foldEveryEvent([
+      change({ node: node('n1', { lastRev: 1 }) }),
+      scratch('n1', { title: '半成品', at: 5 }),
+      change({ node: node('n1', { lastRev: 2, title: '定稿' }), rev: 2, op: 'update' }),
+    ])
+    expect(state.tmp.has(NodeId('n1'))).toBe(false)
+    expect(state.nodes.get(NodeId('n1'))?.title).toBe('定稿')
+  })
+
+  it('survives a checkpoint, and a checkpoint with none reads as no card editing', () => {
+    const editing = foldEveryEvent([scratch('n1', { body: '正在写', at: 5 })])
+    const carried = snapshotOf(editing)
+    expect(carried.tmp).toEqual([{ nodeId: NodeId('n1'), tmp: { body: '正在写', at: 5 } }])
+    expect(projectWorkbench([{ type: 'workbench/snapshot', data: carried }]).tmp.get(NodeId('n1')))
+      .toEqual({ body: '正在写', at: 5 })
+
+    const settled = snapshotOf(emptyWorkbenchState())
+    expect(settled.tmp).toBeUndefined()
+    expect(projectWorkbench([{ type: 'workbench/snapshot', data: settled }]).tmp.size).toBe(0)
+  })
+
+  it('is copied independently, so folding into a copy cannot disturb the original', () => {
+    const original = foldEveryEvent([scratch('n1', { title: '甲', at: 1 })])
+    const copy = cloneWorkbenchState(original)
+    applyWorkbenchEvent(copy, scratch('n1', null))
+    expect(original.tmp.has(NodeId('n1'))).toBe(true)
+    expect(copy.tmp.has(NodeId('n1'))).toBe(false)
   })
 })

@@ -1760,7 +1760,7 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
 
 ### `workbench_propose`
 
-提一份草稿。这是你唯一的写路径，草稿不进本体：人会看、可能就地改、然后采纳或不要。可以给一个已有节点补正文和字段，也可以提一批新节点（冷启动时的候选骨架）。闸门当场校验，过不了会返回缺什么而不是记下一份落不了地的草稿。
+提一份草稿。这是你唯一的写路径，草稿不进本体：人会看、可能就地改、然后采纳或不要。可以给一个已有节点补正文、字段和内容体，也可以提一批新节点（冷启动时的候选骨架）。一个模块通常需要不止一种形式才说得清：简介文档是必有的那一份，另外可以给流程图、表格、论证图。闸门当场校验，过不了会返回缺什么而不是记下一份落不了地的草稿。
 
 ```json
 {
@@ -1807,6 +1807,81 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
         ]
       }
     },
+    "bodies": {
+      "type": "array",
+      "description": "给 targetNode 的内容体。复杂的东西用多种形式说清楚是应该的，一次可以提好几个；改已有的那份就填它的 replaces。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string",
+            "description": "tag 条上显示的名字，两到四个字。"
+          },
+          "replaces": {
+            "type": "string",
+            "description": "要替换掉的内容体 id。改一份已有内容体时填它，不填就是新增。"
+          },
+          "kind": {
+            "type": "string",
+            "description": "brief 简介文档（每张卡必有一个）｜table 表格｜flow 流程图｜argument 论证图。",
+            "enum": [
+              "brief",
+              "table",
+              "flow",
+              "argument"
+            ]
+          },
+          "duty": {
+            "type": "string",
+            "description": "kind=brief：这张卡管什么、不管什么，一两句。"
+          },
+          "body": {
+            "type": "string",
+            "description": "kind=brief：展开的正文。"
+          },
+          "columns": {
+            "type": "array",
+            "description": "kind=table：列名。",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "description": "kind=table：每行的单元格，顺序与 columns 一致。某一列每格都是纯数字时，图表会自动可用。",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "steps": {
+            "type": "array",
+            "description": "kind=flow：按顺序的步骤。",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stance": {
+            "type": "string",
+            "description": "kind=argument：立场。"
+          },
+          "grounds": {
+            "type": "array",
+            "description": "kind=argument：论据；以「反：」开头的表示反对这个立场。",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ]
+      }
+    },
     "newNodes": {
       "type": "array",
       "description": "提议新建的节点。parent 留空就挂在 targetNode 下（targetNode 也为空则挂到根）。",
@@ -1849,6 +1924,80 @@ todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为
               "required": [
                 "name",
                 "value"
+              ]
+            }
+          },
+          "bodies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "description": "tag 条上显示的名字，两到四个字。"
+                },
+                "replaces": {
+                  "type": "string",
+                  "description": "要替换掉的内容体 id。改一份已有内容体时填它，不填就是新增。"
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "brief 简介文档（每张卡必有一个）｜table 表格｜flow 流程图｜argument 论证图。",
+                  "enum": [
+                    "brief",
+                    "table",
+                    "flow",
+                    "argument"
+                  ]
+                },
+                "duty": {
+                  "type": "string",
+                  "description": "kind=brief：这张卡管什么、不管什么，一两句。"
+                },
+                "body": {
+                  "type": "string",
+                  "description": "kind=brief：展开的正文。"
+                },
+                "columns": {
+                  "type": "array",
+                  "description": "kind=table：列名。",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rows": {
+                  "type": "array",
+                  "description": "kind=table：每行的单元格，顺序与 columns 一致。某一列每格都是纯数字时，图表会自动可用。",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "steps": {
+                  "type": "array",
+                  "description": "kind=flow：按顺序的步骤。",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "stance": {
+                  "type": "string",
+                  "description": "kind=argument：立场。"
+                },
+                "grounds": {
+                  "type": "array",
+                  "description": "kind=argument：论据；以「反：」开头的表示反对这个立场。",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "label",
+                "kind"
               ]
             }
           }

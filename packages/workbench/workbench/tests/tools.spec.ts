@@ -247,6 +247,94 @@ describe(PROPOSE_TOOL, () => {
   })
 })
 
+describe(`${PROPOSE_TOOL} content bodies`, () => {
+  it('records the bodies a draft offers, in the order given', async () => {
+    const ctx = await mount()
+    const agent = agentOn(ctx, 'bodies')
+    const result = await call(ctx, agent, PROPOSE_TOOL, {
+      title: '一张成形的卡',
+      newNodes: [{
+        title: '形式',
+        bodies: [
+          { label: '简介', kind: 'brief', duty: '定怎么讲', body: '十五分钟随便讲讲' },
+          { label: '流程图', kind: 'flow', steps: ['定主题', '找讲师', '开放报名'] },
+          { label: '对比', kind: 'table', columns: ['做法', '准备成本'], rows: [['正式', '8'], ['随便讲', '2']] },
+          { label: '论证', kind: 'argument', stance: '不要求 PPT', grounds: ['准备成本低', '反：不够正式'] },
+        ],
+      }],
+    })
+    expect(value(result).kind).toBe('drafted')
+    const draft = agent.session.events.find(event => event.type === 'workbench/proposal')?.data as WorkbenchProposal
+    const offered = draft.newNodes?.[0]?.bodies ?? []
+    expect(offered.map(body => body.payload.kind)).toEqual(['brief', 'flow', 'table', 'argument'])
+  })
+
+  it('gives every addressable object an id, which is what an anchor cites', async () => {
+    const ctx = await mount()
+    const agent = agentOn(ctx, 'ids')
+    await call(ctx, agent, PROPOSE_TOOL, {
+      title: '带流程',
+      newNodes: [{ title: '形式', bodies: [{ label: '流程图', kind: 'flow', steps: ['甲', '乙'] }] }],
+    })
+    const draft = agent.session.events.find(event => event.type === 'workbench/proposal')?.data as WorkbenchProposal
+    const payload = draft.newNodes?.[0]?.bodies?.[0]?.payload
+    expect(payload?.kind === 'flow' && payload.steps.map(step => step.stepId)).toEqual(['s0', 's1'])
+  })
+
+  it('reads 反： as opposing the stance rather than as part of the text', async () => {
+    const ctx = await mount()
+    const agent = agentOn(ctx, 'against')
+    await call(ctx, agent, PROPOSE_TOOL, {
+      title: '论证',
+      newNodes: [{ title: '形式', bodies: [{ label: '论证', kind: 'argument', stance: '甲', grounds: ['反：乙'] }] }],
+    })
+    const draft = agent.session.events.find(event => event.type === 'workbench/proposal')?.data as WorkbenchProposal
+    const payload = draft.newNodes?.[0]?.bodies?.[0]?.payload
+    expect(payload?.kind === 'argument' && payload.grounds[0]).toEqual({ groundId: 'g0', text: '乙', opposes: true })
+  })
+
+  it('refuses each kind whose own fields are missing, and records no draft', async () => {
+    const incomplete = [
+      { label: '简介', kind: 'brief', duty: '只有职责' },
+      { label: '表格', kind: 'table', columns: ['a'] },
+      { label: '流程', kind: 'flow' },
+      { label: '论证', kind: 'argument', stance: '只有立场' },
+    ]
+    for (const body of incomplete) {
+      const ctx = await mount()
+      const agent = agentOn(ctx, `bad-${body.kind}`)
+      const result = await call(ctx, agent, PROPOSE_TOOL, { title: '坏草稿', bodies: [body] })
+      const canonical = value(result)
+      expect(canonical.kind).toBe('blocked')
+      expect(agent.session.events.filter(event => event.type === 'workbench/proposal')).toHaveLength(0)
+    }
+  })
+
+  it('carries replaces through, which is how one round revises an existing body', async () => {
+    const ctx = await mount()
+    const agent = agentOn(ctx, 'replaces')
+    await call(ctx, agent, PROPOSE_TOOL, {
+      title: '改一版',
+      targetNode: 'anything',
+      bodies: [{ label: '简介', kind: 'brief', duty: '新职责', body: '新正文', replaces: 'b1' }],
+    })
+    // The draft is refused for its dangling target, which is a different gate; what
+    // this pins is that `replaces` survived the read rather than being dropped.
+    const drafted = agent.session.events.find(event => event.type === 'workbench/proposal')
+    expect(drafted).toBeUndefined()
+  })
+
+  it('refuses a malformed body on a proposed node too, not only on the target', async () => {
+    const ctx = await mount()
+    const agent = agentOn(ctx, 'bad-nested')
+    const result = await call(ctx, agent, PROPOSE_TOOL, {
+      title: '坏草稿',
+      newNodes: [{ title: '形式', bodies: [{ label: '流程', kind: 'flow' }] }],
+    })
+    expect(value(result).kind).toBe('blocked')
+  })
+})
+
 describe(CHECK_PROMOTION_TOOL, () => {
   it('reports what a node still needs, and does not promote it', async () => {
     const ctx = await mount()

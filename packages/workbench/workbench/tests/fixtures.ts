@@ -49,6 +49,9 @@ export function graphOf(
   return {
     nodes: new Map(nodes.map(item => [item.id, item])),
     firstLayer: new Map(entries.map(entry => [entry.entryId, entry])),
+    // Empty on purpose: every derivation a test drives through this helper is one
+    // that must not see uncommitted edit state, so the fixture never seeds any.
+    tmp: new Map(),
     meta: { rev: 7, fieldDictionary },
   }
 }

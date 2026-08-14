@@ -63,6 +63,7 @@ export const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string> = new Set([
   'web/deepseek-search-llm-request',
   'workbench/node-change',
   'workbench/proposal',
+  'workbench/scratch',
   'workbench/snapshot',
   'workbench/utterance',
   'workbench/verdict',
