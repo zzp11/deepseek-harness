@@ -167,6 +167,9 @@ describe('the browser half', () => {
     await face.openIdeas('n1' as NodeId)
     expect(lastRequest(b.execute)).toEqual({ op: 'open-ideas', nodeId: 'n1' })
 
+    await face.promoteToConstraint('n1' as NodeId)
+    expect(lastRequest(b.execute)).toEqual({ op: 'promote-to-constraint', nodeId: 'n1' })
+
     await face.focusNode('n1' as NodeId)
     expect(lastRequest(b.execute)).toEqual({ op: 'focus', nodeId: 'n1' })
 

@@ -133,6 +133,11 @@ export interface WorkbenchInjected {
   /** Open a card's idea area, creating its root the first time. */
   openIdeas: (nodeId: NodeId) => Promise<EditOutcome>
   /**
+   * Move a card into the global-constraint area, where it governs everything
+   * outside it. The area's root is created on the first promotion.
+   */
+  promoteToConstraint: (nodeId: NodeId) => Promise<EditOutcome>
+  /**
    * Record which card the person is on, so the host can stamp what they say next
    * with the module it was said in.
    */

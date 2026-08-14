@@ -167,10 +167,47 @@ describe('web e2e: the workbench, one long human flow', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
+  it('opens an idea area on the card, and keeps it out of the tree', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-ideas'))
+    // Opening the area is an action on the card, not a tab that shows nothing: the
+    // tag appears only once the area exists.
+    expect(await card().getByRole('button', { name: '⁄想法' }).count()).toBe(0)
+    await card().getByRole('button', { name: '⋯' }).last().click()
+    await page.getByRole('menuitem', { name: 'Open the idea area' }).click()
+    const ideas = card().getByRole('button', { name: '⁄想法' })
+    await ideas.waitFor({ timeout: 10_000 })
+    await ideas.click()
+    // Empty, and its root is nowhere in main-region navigation — an unconfirmed
+    // thought must not be reachable by scanning the tree.
+    await expect.poll(
+      () => card().getByText('Nothing to draw here yet.').count(),
+      { timeout: 10_000 },
+    ).toBe(1)
+    expect(await column().getByRole('button', { name: /想法区/ }).count()).toBe(0)
+  }, 60_000)
+
+  it('promotes a card into the global-constraint band, which the left column pins', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-constraint'))
+    await addCard('不超预算')
+    await focusCard('不超预算')
+    await card().getByRole('button', { name: '⋯' }).last().click()
+    await page.getByRole('menuitem', { name: 'Promote to a global constraint' }).click()
+    // The band stops saying it is empty and lists the card by name.
+    await expect.poll(
+      () => column().getByText('No global constraints yet.', { exact: false }).count(),
+      { timeout: 10_000 },
+    ).toBe(0)
+    await expect.poll(
+      () => column().getByRole('button', { name: /不超预算/ }).count(),
+      { timeout: 10_000 },
+    ).toBeGreaterThan(0)
+  }, 60_000)
+
   it('shows one module’s exchange, not the whole session’s', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-talk'))
     // Said while 场地与时间 is focused, so the host stamps it with that module. The
     // browser never sends the card along: the host reads its own recorded focus.
+    await focusCard('场地与时间')
     say('会议室周四晚上是空的')
     await expect.poll(
       () => page.locator('[class*="_talk"]').getByText('会议室周四晚上是空的', { exact: true }).count(),

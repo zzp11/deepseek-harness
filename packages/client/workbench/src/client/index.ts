@@ -99,6 +99,7 @@ export function apply(ctx: ClientContext): void {
       discardTmp: (nodeId: NodeId) => dispatch(sessionId, { op: 'discard-tmp', nodeId }),
       deleteBody: (nodeId: NodeId, bodyId: BodyId) => dispatch(sessionId, { op: 'delete-body', nodeId, bodyId }),
       openIdeas: (nodeId: NodeId) => dispatch(sessionId, { op: 'open-ideas', nodeId }),
+      promoteToConstraint: (nodeId: NodeId) => dispatch(sessionId, { op: 'promote-to-constraint', nodeId }),
       focusNode: (nodeId: NodeId | null) => dispatch(sessionId, { op: 'focus', nodeId }),
     }),
   }, WorkbenchTab))

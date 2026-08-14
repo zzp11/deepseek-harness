@@ -103,6 +103,7 @@ function callbacks(overrides: Partial<WorkbenchTabProps> = {}) {
     discardTmp: vi.fn(ok),
     deleteBody: vi.fn(ok),
     openIdeas: vi.fn(ok),
+    promoteToConstraint: vi.fn(ok),
     focusNode: vi.fn(ok),
     ...overrides,
   }

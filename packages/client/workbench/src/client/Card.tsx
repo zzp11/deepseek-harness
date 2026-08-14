@@ -55,6 +55,7 @@ export interface CardProps {
   readonly onAskReject: () => void
   readonly onDeleteBody: (bodyId: BodyId) => void
   readonly onOpenIdeas: () => void
+  readonly onPromoteToConstraint: () => void
   /**
    * Write the card's whole edit state. Whole-value rather than a patch: only the
    * editing branches call it, and each of them has the current edit state narrowed to
@@ -228,6 +229,7 @@ export function Card(props: CardProps): React.JSX.Element {
           label="⋯"
           items={[
             { id: 'ideas', label: t('card.openIdeas'), onSelect: props.onOpenIdeas },
+            { id: 'constraint', label: t('card.toConstraint'), onSelect: props.onPromoteToConstraint },
             ...authored === undefined || authored.kind === 'brief'
               ? []
               : [{

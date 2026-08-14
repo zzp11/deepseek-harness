@@ -47,7 +47,7 @@ const EMPTY: WorkbenchTreeView = {
 export function WorkbenchTab({
   useSession, useStore, actions, t,
   createChild, promote, acceptProposal, rejectProposal,
-  setTmp, commitTmp, discardTmp, deleteBody, openIdeas, focusNode,
+  setTmp, commitTmp, discardTmp, deleteBody, openIdeas, promoteToConstraint, focusNode,
 }: WorkbenchTabProps): React.JSX.Element {
   const tree = useSession(snapshot => snapshot.views.get('workbench')?.tree) ?? EMPTY
   const selected = useStore(state => state.selected)
@@ -135,6 +135,7 @@ export function WorkbenchTab({
                 onAskReject={() => { actions.setAsk({ kind: 'reject', nodeId: card.node.id }) }}
                 onDeleteBody={(bodyId: BodyId) => { run(deleteBody(card.node.id, bodyId)) }}
                 onOpenIdeas={() => { run(openIdeas(card.node.id)) }}
+                onPromoteToConstraint={() => { run(promoteToConstraint(card.node.id)) }}
                 onEditTmp={(tmp) => { run(setTmp(card.node.id, tmp)) }}
               />
               {ask?.kind !== 'reject' ? null : (

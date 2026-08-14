@@ -108,6 +108,7 @@ function callbacks(overrides: Partial<WorkbenchTabProps> = {}) {
     discardTmp: vi.fn(ok),
     deleteBody: vi.fn(ok),
     openIdeas: vi.fn(ok),
+    promoteToConstraint: vi.fn(ok),
     focusNode: vi.fn(ok),
     ...overrides,
   }
@@ -457,6 +458,13 @@ describe('the auxiliaries', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '⋯' }).at(-1) as HTMLElement)
     fireEvent.click(screen.getByRole('menuitem', { name: zh['card.openIdeas'] }))
     expect(openIdeas).toHaveBeenCalledWith('root')
+  })
+
+  it('promotes a card into the global-constraint area from the card itself', () => {
+    const { promoteToConstraint } = setup(view([change(node('root'), 1)]))
+    fireEvent.click(screen.getAllByRole('button', { name: '⋯' }).at(-1) as HTMLElement)
+    fireEvent.click(screen.getByRole('menuitem', { name: zh['card.toConstraint'] }))
+    expect(promoteToConstraint).toHaveBeenCalledWith('root')
   })
 
   it('removes an authored body, but never offers to remove the brief', () => {
