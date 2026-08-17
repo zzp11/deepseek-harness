@@ -956,7 +956,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/focus': WorkbenchFocus
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:231`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:242`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchnode-change--log-only"></a>
 
@@ -967,7 +967,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/node-change': WorkbenchNodeChange
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:207`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:218`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchproposal--log-only"></a>
 
@@ -978,7 +978,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/proposal': WorkbenchProposal
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:211`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:222`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchscratch--log-only"></a>
 
@@ -1003,7 +1003,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/scratch': WorkbenchScratch
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:229`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:240`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchsnapshot--log-only"></a>
 
@@ -1014,7 +1014,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/snapshot': WorkbenchSnapshot
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:205`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:216`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchutterance--log-only"></a>
 
@@ -1025,7 +1025,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/utterance': WorkbenchUtterance
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:209`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:220`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchverdict--log-only"></a>
 
@@ -1036,4 +1036,4 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 'workbench/verdict': WorkbenchVerdict
 ```
 
-来源：[`packages/workbench/workbench/src/events.ts:213`](../packages/workbench/workbench/src/events.ts)
+来源：[`packages/workbench/workbench/src/events.ts:224`](../packages/workbench/workbench/src/events.ts)

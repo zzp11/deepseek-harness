@@ -5,7 +5,7 @@
  * rather than in a dialog, and the meter.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-web-react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
@@ -125,7 +125,15 @@ function setup(tree: WorkbenchTreeView | undefined, overrides: Partial<Workbench
     renderSlot: (name: string) => <div data-slot={name} />,
     ...injected,
   } as unknown as WorkbenchTabProps
-  return { ...injected, actions: store.actions, view: render(<WorkbenchTab {...props} />) }
+  return {
+    ...injected,
+    actions: store.actions,
+    view: render(<WorkbenchTab {...props} />),
+    /** Push a newly folded tree, the way a fresh event from the host arrives. */
+    refold: (next: WorkbenchTreeView) => {
+      act(() => { snapshot.set({ views: new Map([['workbench', { tree: next }]]) }) })
+    },
+  }
 }
 
 describe('the first screen', () => {
@@ -366,6 +374,153 @@ describe('the page carries no counters', () => {
       event('workbench/proposal', { proposalId: 'p1', targetNode: 'root', title: '一份草稿', createdAt: 0 }, 2),
     ]))
     expect(screen.getAllByText(/⚑1/).length).toBeGreaterThan(0)
+  })
+})
+
+describe('ruling on a skeleton the model proposed', () => {
+  /** A cold-start draft shaped as a tree: 总纲 with 场地 and 预算 under it, 门票 under 预算. */
+  const skeleton = (proposalId = 'p1'): SessionEvent => event('workbench/proposal', {
+    proposalId,
+    targetNode: null,
+    title: '冷启动骨架',
+    summary: '一棵四张卡的骨架',
+    newNodes: [
+      { title: '总纲', duty: '管全局' },
+      { title: '场地', parentIndex: 0 },
+      { title: '预算', parentIndex: 0 },
+      { title: '门票', parentIndex: 2 },
+    ],
+    createdAt: 0,
+  }, 2)
+
+  it('shows the draft on an empty tree, where the empty state used to be', () => {
+    // The failure this closes: accept rendered only inside a focused card, filtered to
+    // that card, so a draft with no target on a tree with no cards was unreachable —
+    // the model's whole skeleton showed as one line of text.
+    setup(view([skeleton()]))
+    expect(screen.getByText(zh['skeleton.title'])).toBeDefined()
+    // Twice on purpose: the right column records that a draft was proposed at this
+    // point in the exchange, the focus column is the thing to act on now.
+    expect(screen.getAllByText('冷启动骨架')).toHaveLength(2)
+    expect(screen.getByText('一棵四张卡的骨架')).toBeDefined()
+    expect(screen.queryByText(zh['empty.title'])).toBeNull()
+    expect(screen.getByText('4 / 4 张')).toBeDefined()
+    for (const title of ['总纲', '场地', '预算', '门票']) {
+      expect(screen.getByDisplayValue(title)).toBeDefined()
+    }
+  })
+
+  it('opens nothing for a target-less draft that carries no cards', () => {
+    // Not a skeleton: the accept path refuses it as having nothing to commit, so a
+    // review would be a surface with no subject.
+    setup(view([event('workbench/proposal', {
+      proposalId: 'p-bare', targetNode: null, title: '只有标题', createdAt: 0,
+    }, 2)]))
+    expect(screen.queryByText(zh['skeleton.title'])).toBeNull()
+    expect(screen.getByText(zh['empty.title'])).toBeDefined()
+  })
+
+  it('renders a draft that carries no summary, without an empty line where it would go', () => {
+    setup(view([event('workbench/proposal', {
+      proposalId: 'p-nosum',
+      targetNode: null,
+      title: '没有摘要的骨架',
+      newNodes: [{ title: '总纲', duty: '管全局' }],
+      createdAt: 0,
+    }, 2)]))
+    expect(screen.getByText(zh['skeleton.title'])).toBeDefined()
+    expect(screen.getByDisplayValue('总纲')).toBeDefined()
+  })
+
+  it('keeps the draft on screen while a card is selected', () => {
+    // A skeleton is a decision waiting on the person. Gating it on "no card focused"
+    // meant the model could propose more structure onto a tree that already had cards
+    // and the person would never see it — the same unreachability, one step later.
+    setup(view([change(node('root'), 1), skeleton()]))
+    fireEvent.click(screen.getAllByRole('button', { name: /title-root/ })[0] as HTMLElement)
+    expect(screen.getByText(zh['skeleton.title'])).toBeDefined()
+    expect(screen.getByRole('heading', { name: 'title-root' })).toBeDefined()
+  })
+
+  it('accepts as proposed when the person changed nothing', () => {
+    const { acceptProposal } = setup(view([skeleton()]))
+    fireEvent.click(screen.getByRole('button', { name: zh['proposal.accept'] }))
+    expect(acceptProposal).toHaveBeenCalledWith('p1', [], [
+      { index: 0 }, { index: 1 }, { index: 2 }, { index: 3 },
+    ])
+  })
+
+  it('carries a renamed card, and only the ones actually renamed', () => {
+    const { acceptProposal } = setup(view([skeleton()]))
+    fireEvent.change(screen.getByDisplayValue('场地'), { target: { value: '场地与档期' } })
+    fireEvent.click(screen.getByRole('button', { name: zh['proposal.accept'] }))
+    expect(acceptProposal).toHaveBeenCalledWith('p1', [], [
+      { index: 0 }, { index: 1, title: '场地与档期' }, { index: 2 }, { index: 3 },
+    ])
+  })
+
+  it('cuts a card together with everything under it', () => {
+    // 门票 under 预算 is a budget line; 门票 at the root is a concern of its own. The
+    // host refuses an accept that orphans a child, so the surface must not offer it.
+    const { acceptProposal } = setup(view([skeleton()]))
+    const rows = screen.getAllByRole('button', { name: zh['skeleton.cut'] })
+    fireEvent.click(rows[2] as HTMLElement)
+    expect(screen.getByText('2 / 4 张')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: zh['proposal.accept'] }))
+    expect(acceptProposal).toHaveBeenCalledWith('p1', [], [{ index: 0 }, { index: 1 }])
+  })
+
+  it('puts a cut card back, without restoring its children', () => {
+    const { acceptProposal } = setup(view([skeleton()]))
+    fireEvent.click((screen.getAllByRole('button', { name: zh['skeleton.cut'] })[2]) as HTMLElement)
+    // Two rows now offer 恢复 — 预算 and the 门票 that went with it. Restoring the
+    // first puts back only 预算.
+    expect(screen.getAllByRole('button', { name: zh['skeleton.restore'] })).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: zh['skeleton.restore'] })[0] as HTMLElement)
+    fireEvent.click(screen.getByRole('button', { name: zh['proposal.accept'] }))
+    // 预算 is back; 门票 stays cut, because restoring a parent cannot know whether the
+    // person wanted the whole subtree back.
+    expect(acceptProposal).toHaveBeenCalledWith('p1', [], [{ index: 0 }, { index: 1 }, { index: 2 }])
+  })
+
+  it('refuses to accept nothing, and says why', () => {
+    const { acceptProposal } = setup(view([skeleton()]))
+    fireEvent.click((screen.getAllByRole('button', { name: zh['skeleton.cut'] })[0]) as HTMLElement)
+    expect(screen.getByText('0 / 4 张')).toBeDefined()
+    expect(screen.getByText(zh['skeleton.emptyKept'])).toBeDefined()
+    const accept = screen.getByRole('button', { name: zh['proposal.accept'] })
+    expect(accept).toHaveProperty('disabled', true)
+    fireEvent.click(accept)
+    expect(acceptProposal).not.toHaveBeenCalled()
+  })
+
+  it('asks for a reason before discarding, because a rejection is worth keeping', () => {
+    const { rejectProposal } = setup(view([skeleton()]))
+    fireEvent.click(screen.getByRole('button', { name: zh['proposal.discard'] }))
+    expect(rejectProposal).not.toHaveBeenCalled()
+    const reason = screen.getByLabelText(zh['talk.discardAsk'])
+    fireEvent.change(reason, { target: { value: '规模不对' } })
+    fireEvent.keyDown(reason, { key: 'Enter' })
+    expect(rejectProposal).toHaveBeenCalledWith('p1', '规模不对')
+  })
+
+  it('starts a second draft from what the model offered, not the first draft’s renames', () => {
+    // The surface is keyed by the draft. Without that key React reuses the component and
+    // the person's renames and cuts from a draft they already ruled on would silently
+    // ride onto the next one.
+    const { refold, acceptProposal } = setup(view([skeleton('pA')]))
+    fireEvent.change(screen.getByDisplayValue('场地'), { target: { value: '改过的' } })
+    refold(view([
+      skeleton('pA'),
+      event('workbench/verdict', { proposalId: 'pA', outcome: 'rejected', rev: 1 }, 3),
+      skeleton('pB'),
+    ]))
+    expect(screen.queryByDisplayValue('改过的')).toBeNull()
+    expect(screen.getByDisplayValue('场地')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: zh['proposal.accept'] }))
+    expect(acceptProposal).toHaveBeenCalledWith('pB', [], [
+      { index: 0 }, { index: 1 }, { index: 2 }, { index: 3 },
+    ])
   })
 })
 

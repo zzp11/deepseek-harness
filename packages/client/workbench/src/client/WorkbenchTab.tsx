@@ -1,5 +1,6 @@
 /**
- * The 工作台 tab: three columns and a meter.
+ * The 工作台 tab: a directory, the focused card, and one module's exchange with the
+ * composer under it.
  *
  * It reads one thing — the tree the fold publishes — and writes through the injected
  * callbacks. Every question it asks is asked in place: a modal would take the caret
@@ -12,6 +13,7 @@ import { NodeId, ProposalId, type BodyId } from '@deepseek-ai/dsh-workbench/proj
 import { buildCardView } from './card-view.ts'
 import { Card } from './Card.tsx'
 import type { EditOutcome, WorkbenchTabProps, WorkbenchTreeView } from './contract.ts'
+import { SkeletonReview } from './SkeletonReview.tsx'
 import { TalkColumn, talkLines } from './TalkColumn.tsx'
 import styles from './WorkbenchTab.module.css'
 import { WorkbenchTree } from './WorkbenchTree.tsx'
@@ -80,6 +82,18 @@ export function WorkbenchTab({
     focus === null ? null : NodeId(focus),
   )
 
+  // A skeleton draft offers whole new cards instead of editing one that exists, so it
+  // has no target to render inside and gets the focus column to itself. Oldest first:
+  // the person rules on them in the order the model offered them. A target-less draft
+  // carrying no cards is not a skeleton and opens nothing — the accept path refuses it
+  // as having nothing to commit, and an empty review would be a surface with no subject.
+  const skeleton = tree.proposals.flatMap((row) => {
+    const offered = row.proposal.newNodes
+    if (row.ruled || row.proposal.targetNode !== null) return []
+    if (offered === undefined || offered.length === 0) return []
+    return [{ proposal: row.proposal, offered }]
+  })[0]
+
   return (
     <div className={styles.root}>
       <div className={styles.map}>
@@ -104,13 +118,32 @@ export function WorkbenchTab({
 
       <div className={styles.focus}>
         {refusal === null ? null : <p className={styles.refusal}>{refusal}</p>}
+        {/* Above the card, not instead of it: a skeleton is a decision waiting on the
+            person, and selecting a card must not hide something they have to rule on.
+            Keyed by the draft, so a second one does not inherit the first's renames. */}
+        {skeleton === undefined ? null : (
+          <SkeletonReview
+            key={skeleton.proposal.proposalId}
+            proposal={skeleton.proposal}
+            offered={skeleton.offered}
+            t={t}
+            onAccept={(kept) => {
+              run(acceptProposal(ProposalId(skeleton.proposal.proposalId), [], kept))
+            }}
+            onDiscard={() => {
+              actions.setAsk({ kind: 'discard-proposal', proposalId: skeleton.proposal.proposalId })
+            }}
+          />
+        )}
         {card === undefined
-          ? (
-            <div className={styles.empty}>
-              <p>{t('empty.title')}</p>
-              <p>{t('empty.hint')}</p>
-            </div>
-          )
+          ? skeleton !== undefined
+            ? null
+            : (
+              <div className={styles.empty}>
+                <p>{t('empty.title')}</p>
+                <p>{t('empty.hint')}</p>
+              </div>
+            )
           : (
             <>
               <Card
@@ -147,16 +180,6 @@ export function WorkbenchTab({
                   }}
                 />
               )}
-              {ask?.kind !== 'discard-proposal' ? null : (
-                <InlineAsk
-                  label={t('talk.discardAsk')}
-                  onCancel={() => { actions.setAsk(null) }}
-                  onSubmit={(value) => {
-                    actions.setAsk(null)
-                    run(rejectProposal(ProposalId(ask.proposalId), value))
-                  }}
-                />
-              )}
               {tree.proposals.filter(row => !row.ruled && row.proposal.targetNode === card.node.id).map(row => (
                 <div key={row.proposal.proposalId} className={styles.askRow}>
                   <Button
@@ -179,6 +202,19 @@ export function WorkbenchTab({
               ))}
             </>
           )}
+        {/* One site for the reason a rejection needs, wherever the draft was turned
+            down from: a skeleton has no card to host this, and rendering it in both
+            places would put two inputs on screen for one question. */}
+        {ask?.kind !== 'discard-proposal' ? null : (
+          <InlineAsk
+            label={t('talk.discardAsk')}
+            onCancel={() => { actions.setAsk(null) }}
+            onSubmit={(value) => {
+              actions.setAsk(null)
+              run(rejectProposal(ProposalId(ask.proposalId), value))
+            }}
+          />
+        )}
       </div>
 
       <div className={styles.talk}>

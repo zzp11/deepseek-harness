@@ -109,6 +109,17 @@ export interface ProposedField {
 export interface ProposedNode {
   readonly title: string
   readonly parent?: NodeId
+  /**
+   * Parent by position in the SAME `newNodes` list, for a skeleton whose parent does
+   * not exist yet — on a cold start nothing does, so {@link ProposedNode.parent} (an
+   * existing id) cannot express the shape and every node would land at the root.
+   *
+   * Must point at an EARLIER entry: that rules out cycles by construction, and a model
+   * writing a tree top-down satisfies it without trying. Takes precedence over `parent`
+   * when both are given. Pruning a node on accept prunes everything beneath it, because
+   * re-rooting an orphan would silently change what it means.
+   */
+  readonly parentIndex?: number
   readonly duty?: string
   readonly body?: string
   readonly fields?: readonly ProposedField[]

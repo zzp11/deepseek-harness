@@ -36,6 +36,14 @@ A chart is derived, not authored, and its criterion is strict: a table column qu
 
 `brief` is required and cannot be deleted, because `duty` is what stands in for a module's body in the global skeleton. A card is created with one, `duty` and `body` live on the node (where the gates, the dependency sets, and the prompt read them), and `syncBrief` copies them into the brief at the commit point for a log reader and a model reading `bodies` — never read back as truth. A proposed brief replaces the existing one whether or not it says so.
 
+## A cold-start skeleton is a tree
+
+A draft's `newNodes` can describe a whole tree rather than a flat list: an entry's `parentIndex` names its parent by position in the same list. `parent` cannot do this on a cold start — it is an existing node id, and on a cold start nothing exists, so every card would land at the root and the shape the model already worked out would be thrown away.
+
+`parentIndex` must point at an EARLIER entry. That rules out cycles by construction and is satisfied by writing the tree top-down without trying. `planProposal` refuses a draft that breaks the rule, because the model is the only writer of the field and a draft whose shape cannot be built is worth refusing while the model can still fix it; it also gates the draft against a graph containing the draft's own placeholder nodes, so an index-parent is not read as a dangling reference and a loop inside one draft is visible to the cycle gate.
+
+Accepting mints ids for the whole kept set before resolving parents, so a card can hang under a sibling created in the same commit. Pruning a card whose children were kept is refused rather than silently re-rooting them: 门票 under 预算 is a budget line, 门票 at the root is a concern of its own, and the refusal leaves the choice with the person.
+
 ## Edit state, and the region an idea lives in
 
 `workbench/scratch` carries a card's uncommitted edit state so it survives a reload and a change of machine. It never moves `rev`, and it is kept OUT of `WorkbenchNode` — a separate `NodeGraph.tmp` table — so the type the injection path receives has no such field and leaking an uncommitted draft into a model request is unwritable. `at` is stamped from this process's clock; the wire type omits it, so a browser cannot write a time into the log. An empty draft opens edit state on an already-committed card, which is how a person starts editing by hand.
@@ -48,7 +56,7 @@ A node with `region: 'idea'` roots an idea area. One rule governs visibility: an
 
 #### What the model sees
 
-The generated schemas for `workbench_read_nodes`, `workbench_propose`, and `workbench_check_promotion` — see the [generated catalog](../../../docs/tool-catalog.md#deepseek-aidsh-workbench). `workbench_read_nodes` takes an OPTIONAL `nodeId`: called without one it answers with the constraint area and the tree index alone, which is how a cold start gets its first id and how an empty tree reports that it is empty. `workbench_propose` takes the draft — a title, an optional target node, prose, fields, and nodes to create. `workbench_check_promotion` takes one node id.
+The generated schemas for `workbench_read_nodes`, `workbench_propose`, and `workbench_check_promotion` — see the [generated catalog](../../../docs/tool-catalog.md#deepseek-aidsh-workbench). `workbench_read_nodes` takes an OPTIONAL `nodeId`: called without one it answers with the constraint area and the tree index alone, which is how a cold start gets its first id and how an empty tree reports that it is empty. `workbench_propose` takes the draft — a title, an optional target node, prose, fields, and nodes to create, where `newNodes[].parentIndex` lets one draft describe a whole tree by naming each parent by its position in that same list. `workbench_check_promotion` takes one node id.
 
 #### Token effect
 

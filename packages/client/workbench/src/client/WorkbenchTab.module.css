@@ -341,6 +341,56 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* ── skeleton review ─────────────────────────────────────────────── */
+
+/* Dashed like an editing card, and for the same reason: nothing here is in the tree
+   yet. The person is ruling on it, not reading it. */
+.skeleton {
+  max-width: 920px;
+  padding: 14px;
+  border: 1px dashed var(--dsw-alias-state-warn-primary);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.skeletonHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.skeletonWhat {
+  margin: 0 0 8px;
+  font: var(--dsw-font-xs-strong-13);
+  color: var(--dsw-alias-label-primary);
+}
+
+.skeletonHint {
+  margin: 0 0 12px;
+  font: var(--dsw-font-xxs-12);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.skeletonList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A cut card stays visible: it is the only way to see what was cut and put it back. */
+.skeletonRowCut {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
 /* ── inputs ──────────────────────────────────────────────────────── */
 
 .line,

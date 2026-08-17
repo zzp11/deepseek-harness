@@ -17,7 +17,7 @@
 
 import type { BodyId, NodeId, ProposalId, SourceId } from './brand.ts'
 import { children, invalidate, nextRev } from './core.ts'
-import type { ProposedBody, ProposedField, WorkbenchNodeChange } from './events.ts'
+import type { ProposedBody, ProposedField, ProposedNode, WorkbenchNodeChange } from './events.ts'
 import { blockingFindings, gateReason, runNodeGates, type GateFinding } from './gates.ts'
 import {
   GLOBAL_CONSTRAINT_ROOT_ID,
@@ -598,13 +598,36 @@ function planAcceptProposal(
   const offered = proposal.newNodes ?? []
   const kept: readonly { readonly index: number; readonly title?: string }[] =
     request.keptNodes ?? offered.map((_proposed, index) => ({ index }))
+  // Ids are minted for the whole kept set FIRST, so a node can hang under a sibling
+  // being created in the same accept. `parentIndex` points at an earlier entry, so one
+  // pass would work for a well-ordered draft — but resolving against a complete map
+  // makes a refusal name the real problem (a pruned parent) instead of a missing id.
+  const mintedByIndex = new Map<number, NodeId>()
+  const resolved: { readonly id: NodeId; readonly proposed: ProposedNode; readonly title?: string }[] = []
   for (const choice of kept) {
     const proposed = offered[choice.index]
     if (proposed === undefined) return refuseRequest(`草稿里没有第 ${String(choice.index)} 个节点`)
+    const id = clock.nodeId()
+    mintedByIndex.set(choice.index, id)
+    resolved.push({ id, proposed, ...choice.title === undefined ? {} : { title: choice.title } })
+  }
+  for (const { id, proposed, title } of resolved) {
+    // Cutting a node cuts everything under it: re-rooting an orphan would silently
+    // change what it means (门票 under 预算 is a budget line; at the root it is a
+    // concern of its own), and a refusal lets the person cut the subtree deliberately.
+    if (proposed.parentIndex !== undefined && !mintedByIndex.has(proposed.parentIndex)) {
+      return refuseRequest(
+        `剪掉了「${offered[proposed.parentIndex]?.title ?? String(proposed.parentIndex)}」`
+        + `，但「${proposed.title}」挂在它下面；要剪就连它下面的一起剪`,
+      )
+    }
+    const parentFromIndex = proposed.parentIndex === undefined
+      ? undefined
+      : mintedByIndex.get(proposed.parentIndex)
     candidates.push({
-      id: clock.nodeId(),
-      title: choice.title ?? proposed.title,
-      parent: proposed.parent ?? proposal.targetNode,
+      id,
+      title: title ?? proposed.title,
+      parent: parentFromIndex ?? proposed.parent ?? proposal.targetNode,
       maturity: 'thought',
       source: 'ai',
       fields: mergeFields(proposed.fields ?? []),

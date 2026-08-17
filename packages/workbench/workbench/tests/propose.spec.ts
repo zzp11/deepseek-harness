@@ -51,6 +51,35 @@ describe('planProposal', () => {
     }])
   })
 
+  it('refuses a parentIndex that does not point at an earlier node', () => {
+    // The model is the only writer of this field, and a draft whose shape cannot be
+    // built is worth refusing while the model can still fix it. Pointing forward (or at
+    // itself) is also what would let a cycle in.
+    for (const parentIndex of [1, 2, 7]) {
+      const plan = planProposal(stateWith(), {
+        targetNode: null,
+        title: '骨架',
+        newNodes: [{ title: '总纲' }, { title: '场地', parentIndex }],
+      }, clock)
+      expect(plan.ok).toBe(false)
+      if (plan.ok) throw new Error(`expected a refusal for parentIndex=${String(parentIndex)}`)
+      expect(plan.findings[0]?.code).toBe('GATE_DANGLING_REF')
+      expect(plan.findings[0]?.message).toMatch(/parentIndex/)
+    }
+  })
+
+  it('keeps a parentIndex that points at an earlier node', () => {
+    const plan = planProposal(stateWith(), {
+      targetNode: null,
+      title: '骨架',
+      newNodes: [{ title: '总纲', duty: '管全局' }, { title: '场地', parentIndex: 0 }],
+    }, clock)
+    if (!plan.ok) throw new Error(`unexpected refusal: ${JSON.stringify(plan.findings)}`)
+    expect(plan.events[0]?.data).toMatchObject({
+      newNodes: [{ title: '总纲' }, { title: '场地', parentIndex: 0 }],
+    })
+  })
+
   it('omits what the draft did not carry rather than writing empty values', () => {
     const plan = planProposal(stateWith(), { targetNode: null, title: '只有标题' }, clock)
     expect(plan.ok).toBe(true)

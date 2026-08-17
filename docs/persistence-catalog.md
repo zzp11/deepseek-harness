@@ -954,7 +954,7 @@ Source: [`packages/web/web-search-deepseek/src/provider.ts:83`](../packages/web/
 'workbench/focus': WorkbenchFocus
 ```
 
-Source: [`packages/workbench/workbench/src/events.ts:231`](../packages/workbench/workbench/src/events.ts)
+Source: [`packages/workbench/workbench/src/events.ts:242`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchnode-change--log-only"></a>
 
@@ -965,7 +965,7 @@ Source: [`packages/workbench/workbench/src/events.ts:231`](../packages/workbench
 'workbench/node-change': WorkbenchNodeChange
 ```
 
-Source: [`packages/workbench/workbench/src/events.ts:207`](../packages/workbench/workbench/src/events.ts)
+Source: [`packages/workbench/workbench/src/events.ts:218`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchproposal--log-only"></a>
 
@@ -976,7 +976,7 @@ Source: [`packages/workbench/workbench/src/events.ts:207`](../packages/workbench
 'workbench/proposal': WorkbenchProposal
 ```
 
-Source: [`packages/workbench/workbench/src/events.ts:211`](../packages/workbench/workbench/src/events.ts)
+Source: [`packages/workbench/workbench/src/events.ts:222`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchscratch--log-only"></a>
 
@@ -1001,7 +1001,7 @@ Source: [`packages/workbench/workbench/src/events.ts:211`](../packages/workbench
 'workbench/scratch': WorkbenchScratch
 ```
 
-Source: [`packages/workbench/workbench/src/events.ts:229`](../packages/workbench/workbench/src/events.ts)
+Source: [`packages/workbench/workbench/src/events.ts:240`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchsnapshot--log-only"></a>
 
@@ -1012,7 +1012,7 @@ Source: [`packages/workbench/workbench/src/events.ts:229`](../packages/workbench
 'workbench/snapshot': WorkbenchSnapshot
 ```
 
-Source: [`packages/workbench/workbench/src/events.ts:205`](../packages/workbench/workbench/src/events.ts)
+Source: [`packages/workbench/workbench/src/events.ts:216`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchutterance--log-only"></a>
 
@@ -1023,7 +1023,7 @@ Source: [`packages/workbench/workbench/src/events.ts:205`](../packages/workbench
 'workbench/utterance': WorkbenchUtterance
 ```
 
-Source: [`packages/workbench/workbench/src/events.ts:209`](../packages/workbench/workbench/src/events.ts)
+Source: [`packages/workbench/workbench/src/events.ts:220`](../packages/workbench/workbench/src/events.ts)
 
 <a id="workbenchverdict--log-only"></a>
 
@@ -1034,4 +1034,4 @@ Source: [`packages/workbench/workbench/src/events.ts:209`](../packages/workbench
 'workbench/verdict': WorkbenchVerdict
 ```
 
-Source: [`packages/workbench/workbench/src/events.ts:213`](../packages/workbench/workbench/src/events.ts)
+Source: [`packages/workbench/workbench/src/events.ts:224`](../packages/workbench/workbench/src/events.ts)

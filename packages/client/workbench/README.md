@@ -14,7 +14,13 @@ The fold, and every derived quantity it renders, come from that package's `./pro
 
 A card has a title row, a tag strip that chooses the content, one content body, and a foot of auxiliaries. Each section is capped (three metadata entries, two actions, one drawer) and everything past a cap goes behind `⋯`, so "keep it readable" holds without anything becoming unreachable.
 
-A model draft is not a second kind of card: it puts this card into **edit state**, which is also what 改这张卡 does. The state carries a dashed edge and one bar with 确定 and 丢弃, and it lives in the host's log, so it survives a reload and a change of machine.
+## Ruling on a skeleton
+
+A draft that offers whole new cards rather than edits to an existing one gets its own surface, above the card and independent of what is selected. It lists the proposed cards indented by `parentIndex`, each with an editable title and a cut. Accept sends the kept indices with the titles the person settled on; the host prunes before it commits, so a cut card never entered the tree. Cutting a card cuts everything under it, because the host refuses an accept that would re-root an orphan and the surface must not offer a state that gets refused. Discard asks for the reason a rejection is required to carry.
+
+Selection does not gate it: a skeleton is a decision waiting on the person, and hiding it behind "no card focused" was how the model's whole first output became unreachable — accept used to render only inside a focused card, filtered to drafts aimed at that card, and a cold-start draft aims at nothing on a tree that has no card to focus.
+
+A model draft aimed at an existing card is not a second kind of card: it puts that card into **edit state**, which is also what 改这张卡 does. The state carries a dashed edge and one bar with 确定 and 丢弃, and it lives in the host's log, so it survives a reload and a change of machine.
 
 The strip distinguishes two kinds of content. An **authored** body (brief, table, flow, argument) has its own stored truth, can be removed, and can be marked `⚠` when it is older than a newer body on the same card. A **derived** view (`⁄` prefix: submodule map, relation graph, global constraints, ideas, chart) is computed per read, so it can be neither edited nor stale. A tag carries the body or the view it opens rather than a key into a second table, so the strip and the body area cannot disagree.
 

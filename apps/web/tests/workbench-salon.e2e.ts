@@ -16,6 +16,9 @@
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+// The HOST package's browser-safe face, not a `dsh-client-*` one: this lane may not pull
+// the Client project graph into the Host build graph.
+import { ProposalId } from '@deepseek-ai/dsh-workbench/projection'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
@@ -47,6 +50,29 @@ describe('web e2e: the workbench, one long human flow', () => {
       content: [{ type: 'text', text }],
       source: { kind: 'user' },
     }), { surfaceOp: 'append' })
+  }
+
+  /**
+   * Append a skeleton draft the way `workbench_propose` does, without a model. Shaped as
+   * a tree through `parentIndex`, which is the only way a cold-start draft can say what
+   * hangs under what — nothing it names exists yet, so an id-based parent has nothing to
+   * point at.
+   */
+  const proposeSkeleton = (proposalId: string): void => {
+    const live = scaffold.ctx.sessions.list().at(-1)
+    if (live === undefined) throw new Error('no live session to propose into')
+    live.append('workbench/proposal', {
+      proposalId: ProposalId(proposalId),
+      targetNode: null,
+      title: '冷启动骨架',
+      summary: '一棵三张卡的骨架',
+      newNodes: [
+        { title: '沙龙总纲', duty: '管这次沙龙从定题到复盘' },
+        { title: '场地档期', parentIndex: 0 },
+        { title: '要不要卖票', parentIndex: 1 },
+      ],
+      createdAt: 0,
+    })
   }
 
   /**
@@ -252,6 +278,71 @@ describe('web e2e: the workbench, one long human flow', () => {
       () => page.getByText('Nothing has been said on this card yet.').count(),
       { timeout: 10_000 },
     ).toBe(1)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 90_000)
+
+  it('lets the person rule on a skeleton the model proposed, and prunes before the commit', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-skeleton'))
+    proposeSkeleton('p-salon-1')
+    // Reachable at all: before this surface existed, a draft aiming at no card rendered
+    // as one line of text and could be neither accepted nor refused.
+    const review = page.locator('[data-skeleton-review]')
+    await review.waitFor({ timeout: 15_000 })
+    await expect.poll(() => review.getByText('3 / 3').count(), { timeout: 10_000 }).toBe(1)
+    // The shape the draft described survives to the screen: one root, one child, one
+    // grandchild, by `parentIndex`.
+    const indents = await page.locator('[class*="_skeletonRow"]').evaluateAll(
+      rows => rows.map(row => (row as HTMLElement).style.marginLeft),
+    )
+    expect(indents).toEqual(['0px', '18px', '36px'])
+
+    // Cutting a parent takes its subtree: 要不要卖票 under 场地档期 is a question about
+    // that venue; at the root it would be a concern of its own.
+    await review.getByRole('button', { name: 'Cut' }).nth(1).click()
+    await expect.poll(() => review.getByText('1 / 3').count(), { timeout: 10_000 }).toBe(1)
+    await review.getByRole('button', { name: 'Restore' }).first().click()
+    await expect.poll(() => review.getByText('2 / 3').count(), { timeout: 10_000 }).toBe(1)
+
+    await review.getByLabel('Title of card 1').fill('内部沙龙总纲')
+    await review.getByRole('button', { name: 'Accept', exact: true }).click()
+
+    // The host committed the kept pair under the person's title, and the pruned card is
+    // nowhere — it never entered the tree, so there is nothing to have deleted.
+    await expect.poll(
+      () => column().getByRole('button', { name: /内部沙龙总纲/ }).count(),
+      { timeout: 15_000 },
+    ).toBe(1)
+    await expect.poll(
+      () => column().getByRole('button', { name: /场地档期/ }).count(),
+      { timeout: 10_000 },
+    ).toBe(1)
+    expect(await column().getByRole('button', { name: /要不要卖票/ }).count()).toBe(0)
+    // The review is done and gone once ruled on.
+    expect(await page.locator('[data-skeleton-review]').count()).toBe(0)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 90_000)
+
+  it('asks why before discarding a skeleton, because a rejection is worth keeping', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-skeleton-discard'))
+    proposeSkeleton('p-salon-2')
+    const review = page.locator('[data-skeleton-review]')
+    await review.waitFor({ timeout: 15_000 })
+    await review.getByRole('button', { name: 'Discard' }).click()
+    // No reason, no rejection: the host requires one, so the surface asks in place.
+    const reason = page.getByLabel('Why not this draft')
+    await reason.waitFor({ timeout: 10_000 })
+    expect(await page.locator('[data-skeleton-review]').count()).toBe(1)
+    await reason.fill('规模不对')
+    await reason.press('Enter')
+    await expect.poll(
+      () => page.locator('[data-skeleton-review]').count(),
+      { timeout: 15_000 },
+    ).toBe(0)
+    // Refused, so nothing of it reached the tree. Counted against the cards the earlier
+    // accept left behind rather than by title alone: the two drafts offer the same
+    // titles, and 内部沙龙总纲 from that accept already contains 沙龙总纲.
+    expect(await column().getByRole('button', { name: /场地档期/ }).count()).toBe(1)
+    expect(await column().getByRole('button', { name: /要不要卖票/ }).count()).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 

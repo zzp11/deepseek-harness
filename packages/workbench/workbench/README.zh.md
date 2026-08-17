@@ -36,6 +36,14 @@ handler 回的是 `{ kind: 'success', sourceEventSeq }`，不重述变更：客�
 
 `brief` 必有且不可删，因为 `duty` 是全局骨架里代替模块正文的东西。卡片创建时就带一个；`duty` 与 `body` 住在节点上（闸门、依赖集、系统提示都在那里读），`syncBrief` 在提交点把它们抄进 `brief`，只为读日志的人和读 `bodies` 的模型 —— 从不当作真相读回。模型提的 `brief` 无论有没有说，都替换既有那一个。
 
+## 冷启动的骨架是一棵树
+
+草稿的 `newNodes` 可以描述**一整棵树**，而不只是一个扁平列表：条目的 `parentIndex` 按位置指出它的父节点在同一个列表里的哪一项。冷启动时 `parent` 做不到这件事——它是一个**已存在**的节点 id，而冷启动时什么都还不存在，于是每张卡都会落到根上，模型已经想清楚的结构被白扔掉。
+
+`parentIndex` 必须指向**更靠前**的条目。这样按构造就排除了成环，而按从上到下写这棵树自然就满足，不用刻意为之。`planProposal` 会拒绝违反这条规则的草稿：这个字段只有模型会写，而一份形状根本搭不起来的草稿，值得在模型还能改的时候就拒掉；它同时把草稿自己的占位节点也放进图里再跑闸门，于是 index 形式的父节点不会被当成悬空引用，完全落在一份草稿内部的环也能被环检测看见。
+
+采纳时**先为整个保留集铸 id，再解析父节点**，所以一张卡可以挂在同一次提交里新建的兄弟节点下。剪掉一张**仍有子节点被保留**的卡会被**拒绝**，不会悄悄把它们改挂到根上：「门票」挂在「预算」下是一条预算科目，挂到根上就成了一件自成一体的事，而这条拒绝把选择权留给人。
+
 ## 编辑态，以及想法所在的区域
 
 `workbench/scratch` 承载一张卡未提交的编辑态，所以它活过刷新、也活过换机器。它从不推动 `rev`，并且**不放在 `WorkbenchNode` 里** —— 是 `NodeGraph.tmp` 单独一张表 —— 于是注入路径拿到的类型里没有这个字段，把未提交的草稿泄漏进模型请求是**写不出来**的。`at` 由本进程的时钟盖章；wire 类型不带它，所以浏览器写不进日志里一个时间。空 draft 会在一张已提交的卡上打开编辑态，这正是人手动开始修改的方式。
@@ -48,7 +56,7 @@ handler 回的是 `{ kind: 'success', sourceEventSeq }`，不重述变更：客�
 
 #### What the model sees
 
-`workbench_read_nodes`、`workbench_propose`、`workbench_check_promotion` 的生成 schema —— 见[生成编目](../../../docs/tool-catalog.md#deepseek-aidsh-workbench)。`workbench_read_nodes` 的 `nodeId` 是**可选**的：不传就只返回约束区和树的索引，冷启动就是这样拿到第一个 id 的，空树也是这样报告自己是空的。`workbench_propose` 收草稿——标题、可选的目标节点、正文、字段，以及要新建的节点。`workbench_check_promotion` 收一个节点 id。
+`workbench_read_nodes`、`workbench_propose`、`workbench_check_promotion` 的生成 schema —— 见[生成编目](../../../docs/tool-catalog.md#deepseek-aidsh-workbench)。`workbench_read_nodes` 的 `nodeId` 是**可选**的：不传就只返回约束区和树的索引，冷启动就是这样拿到第一个 id 的，空树也是这样报告自己是空的。`workbench_propose` 收草稿——标题、可选的目标节点、正文、字段，以及要新建的节点，其中 `newNodes[].parentIndex` 让一份草稿能描述一整棵树——按位置指出每一项的父节点在同一列表里的哪一条。`workbench_check_promotion` 收一个节点 id。
 
 #### Token effect
 

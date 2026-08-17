@@ -1880,7 +1880,7 @@ Source: [`packages/workbench/workbench/src/tools.ts`](../packages/workbench/work
     },
     "newNodes": {
       "type": "array",
-      "description": "提议新建的节点。parent 留空就挂在 targetNode 下（targetNode 也为空则挂到根）。",
+      "description": "提议新建的节点。可以一次提一棵树：用 parentIndex 指向这个列表里更靠前的一项，就能表达层级——冷启动时父节点还不存在，parent 那个 id 无从填起。parent 与 parentIndex 都留空就挂在 targetNode 下（targetNode 也为空则挂到根）。",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -1891,6 +1891,10 @@ Source: [`packages/workbench/workbench/src/tools.ts`](../packages/workbench/work
           "parent": {
             "type": "string",
             "description": "已存在的父节点 id。"
+          },
+          "parentIndex": {
+            "type": "number",
+            "description": "父节点在本列表里的下标，必须比自己小（从上到下写这棵树就自然满足）。冷启动提整棵骨架时用这个，不要用 parent。"
           },
           "duty": {
             "type": "string",

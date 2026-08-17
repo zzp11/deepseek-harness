@@ -199,13 +199,22 @@ export function registerWorkbenchTools(ctx: Context, projectionOf: ProjectionRes
       },
       newNodes: {
         type: 'array',
-        description: '提议新建的节点。parent 留空就挂在 targetNode 下（targetNode 也为空则挂到根）。',
+        description:
+          '提议新建的节点。可以一次提一棵树：用 parentIndex 指向这个列表里更靠前的一项，'
+          + '就能表达层级——冷启动时父节点还不存在，parent 那个 id 无从填起。'
+          + 'parent 与 parentIndex 都留空就挂在 targetNode 下（targetNode 也为空则挂到根）。',
         items: {
           type: 'object',
           additionalProperties: false,
           properties: {
             title: { type: 'string', required: true },
             parent: { type: 'string', description: '已存在的父节点 id。' },
+            parentIndex: {
+              type: 'number',
+              description:
+                '父节点在本列表里的下标，必须比自己小（从上到下写这棵树就自然满足）。'
+                + '冷启动提整棵骨架时用这个，不要用 parent。',
+            },
             duty: { type: 'string', description: '这个节点管什么。有子节点的节点晋升时必须有。' },
             body: { type: 'string' },
             fields: { type: 'array', items: PROPOSED_FIELD_SCHEMA },
@@ -425,6 +434,7 @@ function readDraft(args: {
   newNodes?: readonly {
     title: string
     parent?: string
+    parentIndex?: number
     duty?: string
     body?: string
     fields?: readonly { name: string; value: string; sourceId?: string }[]
@@ -440,6 +450,7 @@ function readDraft(args: {
     created.push({
       title: proposed.title,
       ...proposed.parent === undefined ? {} : { parent: NodeId(proposed.parent) },
+      ...proposed.parentIndex === undefined ? {} : { parentIndex: proposed.parentIndex },
       ...proposed.duty === undefined ? {} : { duty: proposed.duty },
       ...proposed.body === undefined ? {} : { body: proposed.body },
       ...proposed.fields === undefined ? {} : { fields: proposed.fields.map(readField) },

@@ -12,7 +12,7 @@
 import type { NodeId, ProposalId } from './brand.ts'
 import type { ProposedField, ProposedNode, WorkbenchProposal } from './events.ts'
 import { blockingFindings, runNodeGates, type GateFinding } from './gates.ts'
-import type { NodeField, WorkbenchNode } from './model.ts'
+import type { NodeField, NodeGraph, WorkbenchNode } from './model.ts'
 import type { WorkbenchEvent, WorkbenchState } from './store.ts'
 
 /** What the model offers. The shape a tool call arrives in, before an id or a timestamp. */
@@ -87,10 +87,32 @@ export function gateDraft(state: WorkbenchState, draft: ProposalDraft): GateFind
       ...draft.body === undefined ? {} : { body: draft.body },
     })
   }
-  draft.newNodes?.forEach((proposed, index) => {
-    candidates.push(placeholderNode(proposed, draft.targetNode, index))
-  })
-  return candidates.flatMap(candidate => runNodeGates(state, candidate, { promoting: false }))
+  const offered = draft.newNodes ?? []
+  // `parentIndex` must point at an EARLIER entry. Checking it here rather than on accept
+  // is the earliest resolvable point — the model is the only writer, and a draft whose
+  // shape cannot be built is worth refusing while the model can still fix it.
+  for (const [index, proposed] of offered.entries()) {
+    if (proposed.parentIndex === undefined) continue
+    if (proposed.parentIndex >= index || offered[proposed.parentIndex] === undefined) {
+      return [{
+        code: 'GATE_DANGLING_REF',
+        blocking: true,
+        message:
+          `第 ${String(index)} 个节点「${proposed.title}」的 parentIndex=${String(proposed.parentIndex)} 不可用；`
+          + '它必须指向 newNodes 里更靠前的一项（按从上到下的顺序写这棵树就自然满足）',
+      }]
+    }
+  }
+  const placeholders = offered.map((proposed, index) => placeholderNode(proposed, draft.targetNode, index))
+  candidates.push(...placeholders)
+  // The draft's own nodes reference each other, so the gates run against a graph that
+  // contains them: without this an index-parent reads as a dangling reference, and the
+  // cycle gate could not see a loop that lies entirely inside one draft.
+  const graph: NodeGraph = {
+    ...state,
+    nodes: new Map([...state.nodes, ...placeholders.map(node => [node.id, node] as const)]),
+  }
+  return candidates.flatMap(candidate => runNodeGates(graph, candidate, { promoting: false }))
 }
 
 /** A proposed node under an id that cannot collide with the tree, for gating only. */
@@ -98,7 +120,11 @@ function placeholderNode(proposed: ProposedNode, targetNode: NodeId | null, inde
   return {
     id: `draft:${String(index)}` as NodeId,
     title: proposed.title,
-    parent: proposed.parent ?? targetNode,
+    // An index-parent resolves to that placeholder's id, so the gates run against the
+    // shape the draft actually describes rather than a flat list of roots.
+    parent: proposed.parentIndex === undefined
+      ? proposed.parent ?? targetNode
+      : `draft:${String(proposed.parentIndex)}` as NodeId,
     maturity: 'thought',
     source: 'ai',
     fields: fieldMap(proposed.fields ?? []),

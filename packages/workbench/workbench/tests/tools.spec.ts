@@ -210,6 +210,26 @@ describe(PROPOSE_TOOL, () => {
     }])
   })
 
+  it('carries parentIndex through, so a cold-start draft can describe a tree', async () => {
+    // Without this the reader dropped the field and the model's shape never reached the
+    // log — every card would land at the root on accept.
+    const ctx = await mount()
+    const agent = agentOn(ctx, 'propose-shaped')
+    const result = await call(ctx, agent, PROPOSE_TOOL, {
+      title: '冷启动骨架',
+      newNodes: [
+        { title: '总纲', duty: '管全局' },
+        { title: '场地', parentIndex: 0 },
+      ],
+    })
+    expect(value(result).kind).toBe('drafted')
+    const draft = eventsOf(agent.session, 'workbench/proposal')[0]?.data as WorkbenchProposal
+    expect(draft.newNodes).toEqual([
+      { title: '总纲', duty: '管全局' },
+      { title: '场地', parentIndex: 0 },
+    ])
+  })
+
   it('refuses a draft that could never land, instead of recording it', async () => {
     const ctx = await mount()
     const agent = agentOn(ctx, 'propose-blocked')

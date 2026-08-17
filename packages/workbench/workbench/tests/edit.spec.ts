@@ -313,6 +313,90 @@ describe('accept-proposal', () => {
     })
   })
 
+  it('hangs a cold-start skeleton into the shape the draft described', () => {
+    // On a cold start nothing exists yet, so `parent` — an existing NodeId — cannot
+    // say "these hang under that one". Without an index-based parent the model's tree
+    // lands as N sibling roots and the structure it already worked out is thrown away.
+    const shaped: WorkbenchEvent = {
+      type: 'workbench/proposal',
+      data: {
+        proposalId: ProposalId('p2'),
+        targetNode: null,
+        title: '有形状的骨架',
+        newNodes: [
+          { title: '总纲', duty: '管全局' },
+          { title: '场地', parentIndex: 0 },
+          { title: '预算', parentIndex: 0 },
+          { title: '门票', parentIndex: 2 },
+        ],
+        createdAt: 0,
+      },
+    }
+    const plan = planned(planEdit(
+      stateWith([], [shaped]),
+      { op: 'accept-proposal', proposalId: ProposalId('p2') },
+      clockFrom(),
+    ))
+    expect(writtenNodes(plan).map(written => [written.title, written.parent])).toEqual([
+      ['总纲', null],
+      ['场地', 'new0'],
+      ['预算', 'new0'],
+      ['门票', 'new2'],
+    ])
+  })
+
+  it('prunes a kept node’s descendants with it, rather than leaving them at the root', () => {
+    // An orphan would silently change meaning: 门票 under 预算 is a budget line, 门票
+    // at the root is a whole concern of its own. Cutting the parent cuts the subtree.
+    const shaped: WorkbenchEvent = {
+      type: 'workbench/proposal',
+      data: {
+        proposalId: ProposalId('p3'),
+        targetNode: null,
+        title: '有形状的骨架',
+        newNodes: [
+          { title: '总纲' },
+          { title: '预算', parentIndex: 0 },
+          { title: '门票', parentIndex: 1 },
+        ],
+        createdAt: 0,
+      },
+    }
+    const plan = planEdit(
+      stateWith([], [shaped]),
+      { op: 'accept-proposal', proposalId: ProposalId('p3'), keptNodes: [{ index: 0 }, { index: 2 }] },
+      clockFrom(),
+    )
+    expect(plan.ok).toBe(false)
+    if (plan.ok) throw new Error('expected a refusal')
+    expect(plan.failure).toMatchObject({ kind: 'request' })
+    expect(plan.failure.kind === 'request' ? plan.failure.message : '').toMatch(/门票/)
+  })
+
+  it('names the index when a stored draft points at a parent that is not there', () => {
+    // `planProposal` refuses an out-of-range `parentIndex` at the model boundary, but the
+    // log is durable and older or hand-written events reach this path anyway, so the
+    // refusal has to read sensibly with no title to name.
+    const broken: WorkbenchEvent = {
+      type: 'workbench/proposal',
+      data: {
+        proposalId: ProposalId('p4'),
+        targetNode: null,
+        title: '越界的骨架',
+        newNodes: [{ title: '总纲' }, { title: '场地', parentIndex: 9 }],
+        createdAt: 0,
+      },
+    }
+    const plan = planEdit(
+      stateWith([], [broken]),
+      { op: 'accept-proposal', proposalId: ProposalId('p4') },
+      clockFrom(),
+    )
+    expect(plan.ok).toBe(false)
+    if (plan.ok) throw new Error('expected a refusal')
+    expect(plan.failure.kind === 'request' ? plan.failure.message : '').toMatch(/9/)
+  })
+
   it('carries the draft prose and each proposed node duty and body onto the tree', () => {
     const rich: WorkbenchEvent = {
       type: 'workbench/proposal',
