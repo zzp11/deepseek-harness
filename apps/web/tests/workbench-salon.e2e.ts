@@ -104,13 +104,37 @@ describe('web e2e: the workbench, one long human flow', () => {
       () => page.locator('[class*="_talk"]').getByText(OPENING, { exact: true }).count(),
       { timeout: 20_000 },
     ).toBe(1)
-    // Nothing structured yet: the tab asks for one sentence and counts nothing.
-    expect(await page.getByText('One sentence is enough').count()).toBe(1)
-    expect(await page.getByText('No global constraints yet.', { exact: false }).count()).toBe(1)
-    expect(await page.getByText('rev 0').count()).toBe(1)
+    // Nothing structured yet: the directory says so in one line and counts nothing.
+    // No meter and no banded empty-state copy — my_docs/04 D-48 records why the
+    // five-number strip came out.
+    expect(await column().getByText('No cards yet.', { exact: true }).count()).toBe(1)
+    expect(await page.getByText(/rev \d/).count()).toBe(0)
   }, 60_000)
 
-  it('takes the first card from the person, and the tree, the card and the meter all follow', async () => {
+  it('takes the composer into its own column instead of growing a second one', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-composer'))
+    // ONE composer, moved — never a second implementation. Two seats on screen would
+    // give the draft, the images and the chain election two homes each. The seat
+    // carries `data-composer-seat` from ui-conversation's own skeleton, so this holds
+    // without naming a hashed class or a copy string.
+    await expect.poll(
+      () => page.locator('[data-composer-seat]').count(),
+      { timeout: 15_000 },
+    ).toBe(1)
+    // And it is INSIDE the conversation column, not under the page.
+    await expect.poll(
+      () => page.locator('[class*="_talk"] [data-composer-seat]').count(),
+      { timeout: 15_000 },
+    ).toBe(1)
+    // Typing survives the move: what arrived here is the live composer, not a detached
+    // copy that re-mounted empty.
+    const typing = page.locator('[data-composer-seat] textarea:enabled')
+    await typing.fill('场地定在会议室')
+    expect(await typing.inputValue()).toBe('场地定在会议室')
+    await typing.fill('')
+  }, 60_000)
+
+  it('takes the first card from the person, and the directory and the card both follow', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-first-card'))
     await addCard('内部技术沙龙')
     await focusCard('内部技术沙龙')
@@ -186,21 +210,28 @@ describe('web e2e: the workbench, one long human flow', () => {
     expect(await column().getByRole('button', { name: /想法区/ }).count()).toBe(0)
   }, 60_000)
 
-  it('promotes a card into the global-constraint band, which the left column pins', async () => {
+  it('marks a promoted card as a global constraint in place, without a second band', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-constraint'))
     await addCard('不超预算')
     await focusCard('不超预算')
-    await card().getByRole('button', { name: '⋯' }).last().click()
-    await page.getByRole('menuitem', { name: 'Promote to a global constraint' }).click()
-    // The band stops saying it is empty and lists the card by name.
+    // Before: an ordinary card carries its maturity mark, not the scales.
     await expect.poll(
-      () => column().getByText('No global constraints yet.', { exact: false }).count(),
+      () => column().getByRole('button', { name: /⚖.*不超预算/ }).count(),
       { timeout: 10_000 },
     ).toBe(0)
+    await card().getByRole('button', { name: '⋯' }).last().click()
+    await page.getByRole('menuitem', { name: 'Promote to a global constraint' }).click()
+    // After: the SAME row changes its mark. A card that governs the others is still one
+    // card in one place — the earlier banded column listed it twice, which is why the
+    // directory is now one flat list (my_docs/04 D-48).
+    await expect.poll(
+      () => column().getByRole('button', { name: /⚖.*不超预算/ }).count(),
+      { timeout: 10_000 },
+    ).toBe(1)
     await expect.poll(
       () => column().getByRole('button', { name: /不超预算/ }).count(),
       { timeout: 10_000 },
-    ).toBeGreaterThan(0)
+    ).toBe(1)
   }, 60_000)
 
   it('shows one module’s exchange, not the whole session’s', async () => {

@@ -1,28 +1,28 @@
-/* Three columns and a meter: the tree locates, the card says what this is, the
-   conversation column says what was said here. Every colour and every type step
+/* Three columns: the directory locates, the card says what this is, and the
+   conversation column holds what was said here plus the composer that continues it. Every colour and every type step
    comes from a `--dsw-*` token — a name invented here resolves to nothing, which
    makes borders vanish and fills go transparent rather than looking wrong. */
 
 .root {
   display: grid;
   grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(280px, 360px);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   box-sizing: border-box;
-  /* ConversationRoot publishes the floating composer's live height; a view tab
-     that does not reserve it renders its own last row underneath the composer. */
-  padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+  /* No bottom clearance: this view takes the composer into its own right column
+     (`conversation.view.composer`), so nothing floats over its last row. */
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   font: var(--dsw-font-s-14);
 }
 
-/* Below this width the three columns cannot all stay readable; the conversation
-   column is the one that gives way, because it has a sibling Chat tab. */
+/* Below this width the three columns cannot all stay readable. The DIRECTORY is
+   what gives way — the conversation column carries the composer, and a page with
+   no way to type is not a narrower page, it is a broken one. */
 @media (width <= 1180px) {
-  .root { grid-template-columns: minmax(180px, 220px) minmax(0, 1fr); }
-  .talk { display: none; }
+  .root { grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); }
+  .map { display: none; }
 }
 
 .map {
@@ -42,45 +42,42 @@
 
 .talk {
   grid-row: 1;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  padding: 12px;
   border-left: 1px solid var(--dsw-alias-border-l2);
 }
 
-.meter {
-  grid-column: 1 / -1;
-  grid-row: 2;
+/* The exchange scrolls; the composer under it does not. */
+.talkScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+/* The left column is a directory: one flat indented list and one action. */
+.directory {
   display: flex;
-  align-items: baseline;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 6px 12px;
-  border-top: 1px solid var(--dsw-alias-border-l2);
+  flex-direction: column;
+  gap: 1px;
+}
+
+.addRow {
+  margin-top: 8px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
   font: var(--dsw-font-xxs-12);
   color: var(--dsw-alias-label-tertiary);
+  text-align: left;
+  cursor: pointer;
 }
 
-/* The one number about the person rather than the tree. C6 is why it is not the
-   same weight as the rest: nobody notices their own verification slipping. */
-.meterSelf {
-  font: var(--dsw-font-xxs-strong-12);
+.addRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary);
-}
-
-/* ── left column ─────────────────────────────────────────────────── */
-
-.section { margin-bottom: 14px; }
-
-.sectionHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  margin: 0 0 4px;
-  padding: 0 6px;
-  font: var(--dsw-font-xxs-strong-12);
-  color: var(--dsw-alias-label-tertiary);
 }
 
 .row {
@@ -113,13 +110,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.rowCount {
-  flex: none;
-  margin-left: auto;
-  font: var(--dsw-font-xxxs-11);
-  color: var(--dsw-alias-label-tertiary);
 }
 
 .rowReminder {

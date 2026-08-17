@@ -45,7 +45,7 @@ const EMPTY: WorkbenchTreeView = {
  * @returns the tab element.
  */
 export function WorkbenchTab({
-  useSession, useStore, actions, t,
+  useSession, useStore, actions, t, renderSlot,
   createChild, promote, acceptProposal, rejectProposal,
   setTmp, commitTmp, discardTmp, deleteBody, openIdeas, promoteToConstraint, focusNode,
 }: WorkbenchTabProps): React.JSX.Element {
@@ -55,7 +55,6 @@ export function WorkbenchTab({
   const asDiagram = useStore(state => state.asDiagram)
   const anchor = useStore(state => state.anchor)
   const ask = useStore(state => state.ask)
-  const sections = useStore(state => state.sections)
   const refusal = useStore(state => state.refusal)
 
   /** Report a refusal where the person can see it, and clear it on the next success. */
@@ -86,13 +85,9 @@ export function WorkbenchTab({
       <div className={styles.map}>
         <WorkbenchTree
           rows={tree.rows}
-          working={tree.working}
-          constraints={tree.constraints}
           selected={focus}
-          sections={sections}
           t={t}
           onSelect={(nodeId) => { actions.select(nodeId) }}
-          onToggle={(section) => { actions.toggleSection(section) }}
           onAdd={() => { actions.setAsk({ kind: 'add-child', parentId: focus }) }}
         />
         {ask?.kind !== 'add-child' ? null : (
@@ -119,6 +114,10 @@ export function WorkbenchTab({
           : (
             <>
               <Card
+                // Keyed by the card AND by whether it is in edit state: the card owns
+                // a local draft, and remounting is what seeds it — from the node when
+                // reading, from the stored edit state when one opens.
+                key={`${card.node.id}:${card.tmp === undefined ? 'read' : 'edit'}`}
                 view={card}
                 openTag={openTag[card.node.id]}
                 asDiagram={asDiagram}
@@ -129,7 +128,7 @@ export function WorkbenchTab({
                 onAnchor={(bodyId, objectId, label) => { actions.anchorTo({ bodyId, objectId, label }) }}
                 onEnter={(nodeId) => { actions.select(nodeId) }}
                 onOpenEdit={() => { run(setTmp(card.node.id, {})) }}
-                onCommit={() => { run(commitTmp(card.node.id)) }}
+                onCommit={(tmp) => { run(commitTmp(card.node.id, tmp)) }}
                 onDiscard={() => { run(discardTmp(card.node.id)) }}
                 onPromote={() => { run(promote(card.node.id, 'committed')) }}
                 onAskReject={() => { actions.setAsk({ kind: 'reject', nodeId: card.node.id }) }}
@@ -183,15 +182,19 @@ export function WorkbenchTab({
       </div>
 
       <div className={styles.talk}>
-        <TalkColumn
-          lines={lines}
-          anchorLabel={anchor?.label ?? null}
-          t={t}
-          onClearAnchor={() => { actions.anchorTo(null) }}
-        />
+        <div className={styles.talkScroll}>
+          <TalkColumn
+            lines={lines}
+            anchorLabel={anchor?.label ?? null}
+            t={t}
+            onClearAnchor={() => { actions.anchorTo(null) }}
+          />
+        </div>
+        {/* The composer, moved here from the foot of the page: it continues the
+            exchange above it. One instance — ui-conversation renders its own into
+            this seat, so the draft, the images, and the command menu all come along. */}
+        {renderSlot('conversation.view.composer', {})}
       </div>
-
-      <Meter tree={tree} t={t} />
     </div>
   )
 }
@@ -219,33 +222,6 @@ function InlineAsk(props: {
           if (event.key === 'Escape') props.onCancel()
         }}
       />
-    </div>
-  )
-}
-
-/** What the meter strip needs. */
-interface MeterProps {
-  readonly tree: WorkbenchTreeView
-  readonly t: WorkbenchTabProps['t']
-}
-
-/**
- * The foot strip. The △ account is set apart because it is the only number about the
- * person rather than the tree, and nobody notices their own verification slipping.
- */
-function Meter({ tree, t }: MeterProps): React.JSX.Element {
-  return (
-    <div className={styles.meter}>
-      <span>{t('meter.commits', { n: String(tree.commits) })}</span>
-      <span>{t('meter.rev', { n: String(tree.rev) })}</span>
-      <span className={styles.meterSelf}>{t('meter.ai', { n: String(tree.untouchedModelNodes) })}</span>
-      <span>
-        {t('meter.structure', {
-          chars: tree.meanBodyChars.toFixed(1),
-          fields: String(tree.distinctOpenFields),
-        })}
-      </span>
-      {tree.reminders === 0 ? null : <span>{t('meter.reminders', { n: String(tree.reminders) })}</span>}
     </div>
   )
 }

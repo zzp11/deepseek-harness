@@ -41,8 +41,6 @@ export interface WorkbenchStoreState {
   anchor: AnchorState | null
   /** The open inline question, if any. */
   ask: AskState | null
-  /** Which left-column sections are expanded. */
-  sections: { constraints: boolean; working: boolean; rest: boolean }
   /** The last refusal, shown until the next action. */
   refusal: string | null
 }
@@ -54,7 +52,6 @@ type WorkbenchActions = {
   toggleForm: (draft: WorkbenchStoreState, bodyId: string) => void
   anchorTo: (draft: WorkbenchStoreState, anchor: AnchorState | null) => void
   setAsk: (draft: WorkbenchStoreState, ask: AskState | null) => void
-  toggleSection: (draft: WorkbenchStoreState, section: 'constraints' | 'working' | 'rest') => void
   setRefusal: (draft: WorkbenchStoreState, message: string | null) => void
 }
 
@@ -70,7 +67,6 @@ export function createWorkbenchStore(): EngineStoreHandle<WorkbenchStoreState, W
       asDiagram: {},
       anchor: null,
       ask: null,
-      sections: { constraints: true, working: true, rest: true },
       refusal: null,
     }),
     actions: {
@@ -86,7 +82,6 @@ export function createWorkbenchStore(): EngineStoreHandle<WorkbenchStoreState, W
       toggleForm: (draft, bodyId) => { draft.asDiagram[bodyId] = draft.asDiagram[bodyId] !== true },
       anchorTo: (draft, anchor) => { draft.anchor = anchor },
       setAsk: (draft, ask) => { draft.ask = ask },
-      toggleSection: (draft, section) => { draft.sections[section] = !draft.sections[section] },
       setRefusal: (draft, message) => { draft.refusal = message },
     },
   })

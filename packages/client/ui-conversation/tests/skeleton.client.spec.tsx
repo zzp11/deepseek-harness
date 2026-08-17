@@ -17,6 +17,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { createChatStore } from '../src/client/stores.ts'
+import { ComposerDockRegistry, type ComposerDock } from '../src/client/input/dock.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { ConversationRoot } from '../src/client/skeleton/ConversationRoot.tsx'
@@ -99,6 +100,8 @@ function mount(
     composerBlock?: { reason: string }
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** A real dock, for the cases that move the composer into a view's own seat. */
+    composerDock?: ComposerDock
   } = {},
 ) {
   const root = sid('root')
@@ -242,6 +245,9 @@ function mount(
     useWorkspaces: bindSnapshotSelector(workspaces),
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
+    // Most specs have no view offering a seat, so the composer keeps its default one.
+    composerDock: options.composerDock
+      ?? { subscribe: () => () => {}, version: () => 0, host: () => null },
     useInput,
     inputActions,
     renderSlot,
@@ -337,6 +343,56 @@ describe('ConversationRoot resident composer', () => {
     expect(seat?.contains(textarea)).toBe(true)
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
+  })
+
+  it('moves the one composer into a view’s own seat, and brings it back when released', () => {
+    // Both directions, because a dock that only ever docks would leave a view's
+    // unmount with the composer portalled into a detached node.
+    const dock = new ComposerDockRegistry()
+    const offered = document.createElement('div')
+    document.body.append(offered)
+    const b = mount(conversationSnapshot(), undefined, undefined, { composerDock: dock })
+    const scrollBody = () => b.view.container.querySelector('[data-conversation-scroll]')
+    const seat = () => document.querySelectorAll('[data-composer-seat]')
+
+    // Default: one seat, inside the scroll body.
+    expect(seat()).toHaveLength(1)
+    expect(scrollBody()?.contains(seat()[0] as Node)).toBe(true)
+
+    // Docked: still ONE seat — moved, not duplicated — and now inside the offer.
+    act(() => { dock.set(offered) })
+    expect(seat()).toHaveLength(1)
+    expect(offered.contains(seat()[0] as Node)).toBe(true)
+    expect(scrollBody()?.contains(seat()[0] as Node)).toBe(false)
+    // The composer itself came along, rather than an empty wrapper.
+    expect(offered.querySelector('textarea')).not.toBeNull()
+
+    // Released: back to the default seat, without a remount leaving two behind.
+    act(() => { dock.set(null) })
+    expect(seat()).toHaveLength(1)
+    expect(scrollBody()?.contains(seat()[0] as Node)).toBe(true)
+    offered.remove()
+  })
+
+  it('keeps the composer’s draft across the move', () => {
+    // What the dock has to preserve, and the reason it is one composer rather than two.
+    const dock = new ComposerDockRegistry()
+    const offered = document.createElement('div')
+    document.body.append(offered)
+    const b = mount(conversationSnapshot(), undefined, undefined, { composerDock: dock })
+    const typed = b.view.container.querySelector('textarea') as HTMLTextAreaElement
+    fireEvent.change(typed, { target: { value: '场地定在会议室' } })
+
+    act(() => { dock.set(offered) })
+    const moved = offered.querySelector('textarea') as HTMLTextAreaElement
+    expect(moved.value).toBe('场地定在会议室')
+    // Changing a portal's container RE-CREATES the DOM subtree — the element is not
+    // the same node. The draft survives because it lives in the session input machine
+    // above this tree, not because the textarea moved. Nothing may be built on element
+    // identity across a dock change, and anything held only in the DOM (caret offset,
+    // an in-flight IME composition) does not survive one.
+    expect(moved).not.toBe(typed)
+    offered.remove()
   })
 
   it('sticky composer seat wraps the whole overlay chain, not only the fallback stack', () => {

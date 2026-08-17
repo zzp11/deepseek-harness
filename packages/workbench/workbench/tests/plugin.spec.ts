@@ -280,6 +280,24 @@ describe('the first-hand mirror', () => {
       .map(event => (event.data as WorkbenchUtterance).moduleId)).toEqual([undefined, nodeId])
   })
 
+  it('ignores a runtime snapshot the prompt plugin injected as a user message', async () => {
+    // The first-hand layer is the person's own words. The prompt and context plugins
+    // push runtime snapshots through `user/message` too; one machine-written
+    // paragraph in the layer makes every citation drawn from it unreliable, and the
+    // conversation column shows it back as something the person said.
+    const { ctx } = await mount()
+    const agent = await agentOn(ctx, 'mirror-injected')
+    agent.session.append('user/message', {
+      content: [{ type: 'text', text: 'Current runtime context. This snapshot supersedes earlier ones.' }],
+      source: { kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt', form: 'snapshot' },
+    } as never, { surfaceOp: 'append' })
+    await settle()
+    say(agent.session, '这句才是我说的')
+    await settle()
+    expect(workbenchEvents(agent.session, 'workbench/utterance')
+      .map(event => (event.data as WorkbenchUtterance).text)).toEqual(['这句才是我说的'])
+  })
+
   it('ignores a message carrying no words', async () => {
     const { ctx } = await mount()
     const agent = await agentOn(ctx, 'mirror-empty')

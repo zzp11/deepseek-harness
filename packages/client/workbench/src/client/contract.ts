@@ -1,6 +1,6 @@
 /** Shared view types of the workbench tab: what the fold publishes and what the tab is handed. */
 
-import type { PropsLocale, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRenderSlots, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   AuthoredBody, BodyId, ContentBodyKind, DependencyItem, DerivedView, DerivedViewKind, FirstLayerEntry, GateFinding,
@@ -124,8 +124,12 @@ export interface WorkbenchInjected {
    * `at` is the host's stamp, so it is not part of what crosses the wire.
    */
   setTmp: (nodeId: NodeId, tmp: TmpDraft) => Promise<EditOutcome>
-  /** 确定: fold the edit state into the card as one commit. */
-  commitTmp: (nodeId: NodeId) => Promise<EditOutcome>
+  /**
+   * 确定: fold the edit state into the card as one commit. `tmp` is the person's
+   * final draft and supersedes the autosaved one, so the last characters they typed
+   * cannot be lost to a round trip that had not landed yet.
+   */
+  commitTmp: (nodeId: NodeId, tmp?: TmpDraft) => Promise<EditOutcome>
   /** 丢弃: drop the edit state. */
   discardTmp: (nodeId: NodeId) => Promise<EditOutcome>
   /** Remove one authored body. */
@@ -147,6 +151,9 @@ export interface WorkbenchInjected {
 /** The tab's own props: the session-scope runtime kit, its store, its copy, and the injected face. */
 export type WorkbenchTabProps =
   & ConvViewProps
+  // The composer's seat, declared by this view so the one composer renders in the
+  // conversation column rather than floating at the foot of the page.
+  & PropsRenderSlots<'conversation.view.composer'>
   & PropsStore<ReturnType<typeof createWorkbenchStore>>
   & PropsLocale<'workbench'>
   & WorkbenchInjected

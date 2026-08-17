@@ -7,6 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { SourceId } from './brand.ts'
+import { isPersonSaid } from './model.ts'
 import type {} from './events.ts'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-workbench'
@@ -54,10 +55,14 @@ const install: InvariantInstaller = Object.assign((ctx: Context, fail: Invariant
   }, { global: true })
 }, { inject: ['sessions'] })
 
-/** The entry ids the mirror owes this session, in message order. */
+/**
+ * The entry ids the mirror owes this session, in message order — the messages a
+ * PERSON wrote. A runtime snapshot the prompt plugin injected through the same event
+ * type is owed nothing, which is the same rule the mirror applies.
+ */
 function messageEntryIds(session: Session): SourceId[] {
   return session.events
-    .filter(event => event.type === 'user/message')
+    .filter(event => event.type === 'user/message' && isPersonSaid(event.data))
     .map(event => SourceId(`u${String(event.seq)}`))
 }
 

@@ -2,7 +2,8 @@
 // chain, AND the composer bar (session-maybe slot) stay mounted across
 // no-session/session transitions — the bar renders inert via owner props.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import type { WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
@@ -13,7 +14,7 @@ import css from './ConversationRoot.module.css'
 export type ConversationRootProps = ConversationSlotProps
 
 export function ConversationRoot({
-  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock,
+  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock, composerDock,
   renderSlot, renderSlotChain, selectWorkspace, t,
 }: ConversationRootProps) {
   const openState = useSession(s => s.openState)
@@ -27,6 +28,10 @@ export function ConversationRoot({
   // A plugin this package cannot import (ui-model-selection) says this session cannot
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
+  // A conversation view may offer the composer a seat of its own; until one does,
+  // the composer keeps its sticky seat at the foot of the column.
+  useSyncExternalStore(composerDock.subscribe, composerDock.version)
+  const dockHost = composerDock.host()
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
@@ -178,7 +183,11 @@ export function ConversationRoot({
   // on the fallback alone would leave Question/Approval panels at the content
   // end off-screen when the user is not pinned to the floor.
   const composerSeat = (
-    <div ref={seatResizeRef} className={css.composerSeat} data-composer-seat="">
+    <div
+      ref={dockHost === null ? seatResizeRef : null}
+      className={clsx(css.composerSeat, dockHost !== null && css.composerSeatDocked)}
+      data-composer-seat=""
+    >
       {composer}
     </div>
   )
@@ -188,7 +197,12 @@ export function ConversationRoot({
       {renderSlot('conversation.session.header', {})}
       <div className={css.scrollBody} data-conversation-scroll="">
         {renderSlot('conversation.session', {})}
-        {composerSeat}
+        {/* One instance either way. Portalled into the view's seat when a view
+            offers one, so the composer keeps its draft, its images, and its chain
+            election across the move; the height observer is dropped with it,
+            because the property it publishes exists to clear a seat that is no
+            longer at the foot of this scroll body. */}
+        {dockHost === null ? composerSeat : createPortal(composerSeat, dockHost)}
       </div>
     </div>
   )

@@ -3009,7 +3009,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/workbench/workbench/src/index.ts:40`](../packages/workbench/workbench/src/index.ts)
+Source: [`packages/workbench/workbench/src/index.ts:41`](../packages/workbench/workbench/src/index.ts)
 
 <a id="deepseek-aidsh-workflow-worker-thread"></a>
 

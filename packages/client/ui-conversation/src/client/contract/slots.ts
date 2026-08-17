@@ -14,6 +14,7 @@ import type { MarkdownFileMentions } from '@deepseek-ai/dsh-client-ui-primitives
 import type { MessageId } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { ComposerBlock } from '../input/blocks.ts'
+import type { ComposerDock } from '../input/dock.ts'
 import type {
   ComposerKeyboard, DraftAttachmentId, EditSelection, InputActions, InputNotice, InputState,
 } from '../input/contract.ts'
@@ -50,6 +51,22 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * takes every action entry down with it.
      */
     'conversation.session.header': { kind: 'single'; scope: 'session' }
+    /**
+     * The composer's seat INSIDE a conversation view, offered by a view that
+     * wants it somewhere other than the foot of the column.
+     *
+     * Declaring it moves the composer; it does not create a second one. The
+     * view declares this child, this package registers a host into it, and the
+     * one existing composer subtree renders into that host. The draft, the
+     * attached images, and the chain election all survive the move because they
+     * live above this tree — but the move RE-CREATES the DOM subtree, so the
+     * caret offset and an in-flight IME composition do not survive it, and
+     * nothing may depend on element identity across it. The occupant must not
+     * also reserve bottom clearance for the default seat: `--dsh-composer-height`
+     * is published only while the composer is in it. A view that does not declare
+     * this child leaves the composer in that default sticky seat.
+     */
+    'conversation.view.composer': { kind: 'single'; scope: 'session' }
     /**
      * One button in the session header's action row — the additive way to put
      * a per-session control beside the title without replacing the header.
@@ -393,6 +410,19 @@ export interface CommandRowOwnerProps {
   compaction?: CompactionSummaryNode
 }
 
+/** What the docked composer host is handed: the one call that offers or releases the seat. */
+export interface ComposerDockInjected {
+  /**
+   * Offer this element as the composer's seat, or release it with null. Called
+   * from a callback ref, so mounting offers and unmounting releases.
+   * @param host - the seat element, or null on unmount.
+   */
+  offerSeat: (host: HTMLElement | null) => void
+}
+
+/** Full props of the composer's docked host component. */
+export type ComposerDockHostProps = PropsRuntime<'conversation.view.composer'> & InjectFace<ComposerDockInjected>
+
 /** Full props of a registered command-row component. */
 export type CommandRowProps = PropsRuntime<'conversation.chat.commandview'>
 
@@ -422,6 +452,8 @@ export interface ConversationInjected {
    * the root renders as the inert composer's placeholder.
    */
   hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  /** Where the composer is placed; a null host means its default seat. */
+  composerDock: ComposerDock
 }
 
 /** Business callbacks injected into the strict Session body seat. */

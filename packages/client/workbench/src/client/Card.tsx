@@ -49,7 +49,8 @@ export interface CardProps {
   readonly onEnter: (nodeId: NodeId) => void
   /** Open edit state on a card that is already committed. */
   readonly onOpenEdit: () => void
-  readonly onCommit: () => void
+  /** 确定, carrying the person's final draft so the last keystrokes cannot be lost. */
+  readonly onCommit: (tmp: NodeTmp) => void
   readonly onDiscard: () => void
   readonly onPromote: () => void
   readonly onAskReject: () => void
@@ -57,9 +58,10 @@ export interface CardProps {
   readonly onOpenIdeas: () => void
   readonly onPromoteToConstraint: () => void
   /**
-   * Write the card's whole edit state. Whole-value rather than a patch: only the
-   * editing branches call it, and each of them has the current edit state narrowed to
-   * hand, so the tab needs no fallback for a card that is not in edit state.
+   * Autosave the card's edit state. Called when a field loses focus, NOT on every
+   * keystroke: the stored draft exists so a crash or a reload does not lose work, and
+   * making it the render source for a focused input drops characters typed faster
+   * than the round trip.
    */
   readonly onEditTmp: (tmp: NodeTmp) => void
 }
@@ -97,6 +99,14 @@ function Tag(props: {
 }
 
 /**
+ * The card's local draft: the whole edit state, with the three fields this card offers
+ * inputs for resolved to strings. Resolving them in the type is what lets every input
+ * bind `value={draft.x}` directly — a `?? ''` at the input would be unreachable code
+ * claiming the field can be absent when the seed guarantees it cannot.
+ */
+type LiveDraft = NodeTmp & { readonly title: string; readonly duty: string; readonly body: string }
+
+/**
  * Render the focused card.
  * @param props - the folded card view, the open tag, and the callbacks.
  * @returns the card element.
@@ -105,6 +115,23 @@ export function Card(props: CardProps): React.JSX.Element {
   const { view, t } = props
   const tmp = view.tmp
   const editing = tmp !== undefined
+  // Seeded once per mount. The tab keys this component by the card and by whether it
+  // is in edit state, so a new card or a fresh edit state remounts with a fresh seed,
+  // and an autosave landing mid-sentence cannot rewrite what is being typed.
+  const [draft, setDraft] = useState<LiveDraft>(() => ({
+    // Spread FIRST, so everything the edit state carries that no input here shows —
+    // the model's `bodies` edits and the `fromProposal` link — rides along untouched.
+    // Naming only the three typed fields dropped them, which committed the person's
+    // title and threw the model's work away.
+    ...tmp,
+    at: tmp?.at ?? 0,
+    title: tmp?.title ?? view.node.title,
+    duty: tmp?.duty ?? view.node.duty ?? '',
+    body: tmp?.body ?? view.node.body ?? '',
+  }))
+  /** Take one field locally, and hand the whole draft up when the field is left. */
+  const edit = (patch: Partial<NodeTmp>): void => { setDraft(current => ({ ...current, ...patch })) }
+  const save = (): void => { props.onEditTmp(draft) }
   const tags = view.tags
   const active = tags.find(tag => tag.key === props.openTag) ?? tags[0]
   const visible = tags.slice(0, VISIBLE_TAGS)
@@ -117,7 +144,7 @@ export function Card(props: CardProps): React.JSX.Element {
         <div className={styles.pending}>
           <span>{t('card.pending')}</span>
           <span className={styles.pendingActions}>
-            <Button variant="primary" size="sm" onClick={props.onCommit}>{t('card.commit')}</Button>
+            <Button variant="primary" size="sm" onClick={() => { props.onCommit(draft) }}>{t('card.commit')}</Button>
             <Button variant="ghost" size="sm" onClick={props.onDiscard}>{t('card.discard')}</Button>
           </span>
         </div>
@@ -141,8 +168,9 @@ export function Card(props: CardProps): React.JSX.Element {
             <input
               aria-label={t('card.title')}
               className={styles.line}
-              value={tmp.title ?? view.node.title}
-              onChange={(event) => { props.onEditTmp({ ...tmp, title: event.target.value }) }}
+              value={draft.title}
+              onChange={(event) => { edit({ title: event.target.value }) }}
+              onBlur={save}
             />
           )}
         <span className={styles.meta}>
@@ -191,13 +219,14 @@ export function Card(props: CardProps): React.JSX.Element {
                 )}
                 <AuthoredBodyEditor
                   body={active.body}
-                  tmp={tmp}
+                  draft={editing ? draft : undefined}
                   asDiagram={props.asDiagram[active.key] === true}
                   anchoredObject={props.anchorObjectId}
                   t={t}
                   onAnchor={props.onAnchor}
                   onEnter={props.onEnter}
-                  onEditTmp={props.onEditTmp}
+                  onEdit={edit}
+                  onSave={save}
                 />
               </>
             )
@@ -271,33 +300,38 @@ function Overflow(props: {
 /** One authored body, editable in place while the card is in edit state. */
 function AuthoredBodyEditor(props: {
   readonly body: AuthoredBody
-  /** The card's edit state, or undefined when it is not in one. */
-  readonly tmp: NodeTmp | undefined
+  /** The local draft while the card is in edit state, or undefined when it is not. */
+  readonly draft: LiveDraft | undefined
   /** Set once the person asked for the argument's diagram form. */
   readonly asDiagram: boolean
   readonly anchoredObject: string | null
   readonly t: CardProps['t']
   readonly onAnchor: CardProps['onAnchor']
   readonly onEnter: CardProps['onEnter']
-  readonly onEditTmp: CardProps['onEditTmp']
+  /** Take one field into the local draft. */
+  readonly onEdit: (patch: Partial<NodeTmp>) => void
+  /** Autosave the whole draft, on leaving a field. */
+  readonly onSave: () => void
 }): React.JSX.Element {
-  const { tmp } = props
-  if (tmp !== undefined && props.body.kind === 'brief') {
+  const { draft } = props
+  if (draft !== undefined && props.body.kind === 'brief') {
     return (
       <div>
         <label className={styles.label} htmlFor="wb-duty">{props.t('card.duty')}</label>
         <input
           id="wb-duty"
           className={styles.line}
-          value={tmp.duty ?? props.body.duty}
-          onChange={(event) => { props.onEditTmp({ ...tmp, duty: event.target.value }) }}
+          value={draft.duty}
+          onChange={(event) => { props.onEdit({ duty: event.target.value }) }}
+          onBlur={props.onSave}
         />
         <label className={styles.label} htmlFor="wb-body">{props.t('card.body')}</label>
         <textarea
           id="wb-body"
           className={styles.text}
-          value={tmp.body ?? props.body.body}
-          onChange={(event) => { props.onEditTmp({ ...tmp, body: event.target.value }) }}
+          value={draft.body}
+          onChange={(event) => { props.onEdit({ body: event.target.value }) }}
+          onBlur={props.onSave}
         />
       </div>
     )

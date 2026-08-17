@@ -124,6 +124,9 @@ function setup(tree: WorkbenchTreeView, overrides: Partial<WorkbenchTabProps> = 
     useStore: bindSnapshotSelector(store),
     actions: store.actions,
     t,
+    // The composer's seat. ui-conversation owns what goes in it; these specs only
+    // need the tab to offer the seat, which is what the marker proves.
+    renderSlot: (name: string) => <div data-slot={name} />,
     ...injected,
   } as unknown as WorkbenchTabProps
   return { ...injected, snapshot, view: render(<WorkbenchTab {...props} />) }
@@ -513,11 +516,18 @@ describe('the auxiliaries', () => {
       change(node('root'), 1),
       event('workbench/scratch', { nodeId: 'root', tmp: { at: 0 } }, 2),
     ]))
-    fireEvent.change(screen.getByLabelText(zh['card.duty']), { target: { value: '管场地和排期' } })
+    const duty = screen.getByLabelText(zh['card.duty'])
+    fireEvent.change(duty, { target: { value: '管场地和排期' } })
+    // Typing writes nothing: a field whose value comes back from the host drops
+    // characters typed faster than the round trip.
+    expect(setTmp).not.toHaveBeenCalled()
+    expect(duty).toHaveProperty('value', '管场地和排期')
+    // Leaving the field autosaves it, so a reload does not lose the work.
+    fireEvent.blur(duty)
     expect(setTmp).toHaveBeenCalledWith('root', expect.objectContaining({ duty: '管场地和排期' }))
-    // The edit state's own text is what shows, not the committed body's.
-    expect(screen.getByLabelText(zh['card.duty'])).toHaveProperty('value', '管这块')
-    fireEvent.change(screen.getByLabelText(zh['card.body']), { target: { value: '换了一段' } })
+    const body = screen.getByLabelText(zh['card.body'])
+    fireEvent.change(body, { target: { value: '换了一段' } })
+    fireEvent.blur(body)
     expect(setTmp).toHaveBeenCalledWith('root', expect.objectContaining({ body: '换了一段' }))
   })
 
@@ -535,19 +545,21 @@ describe('the auxiliaries', () => {
 })
 
 describe('the left column', () => {
-  it('folds each section away and back', () => {
-    setup(view([change(node('root', { maturity: 'committed' }), 1)]))
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^⚖ ${zh['map.constraints']}`) }))
-    expect(screen.queryByText(zh['map.constraintsEmpty'])).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${zh['map.working']}`) }))
-    expect(screen.queryByText(zh['map.workingEmpty'])).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${zh['map.rest']}`) }))
-    expect(screen.getByRole('button', { name: zh['map.add'] })).toBeDefined()
+  it('lists every card exactly once, indented by where it hangs', () => {
+    // The banded version put each card on screen two or three times — pinned,
+    // and again in the full tree — which is most of what made the column noisy.
+    setup(view([
+      change(node('root', { title: '沙龙' }), 1),
+      change(node('kid', { parent: 'root' as never, title: '场地' }), 2),
+    ]))
+    expect(screen.getAllByRole('button', { name: /沙龙/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /场地/ })).toHaveLength(1)
   })
 
-  it('says so before any card exists rather than showing an empty band', () => {
+  it('says so before any card exists, and still offers the one action', () => {
     setup(view([]))
-    expect(screen.getByText(zh['map.workingEmpty'])).toBeDefined()
+    expect(screen.getByText(zh['map.empty'])).toBeDefined()
+    expect(screen.getByRole('button', { name: zh['map.add'] })).toBeDefined()
     expect(screen.getByText(zh['empty.title'])).toBeDefined()
   })
 
@@ -586,15 +598,17 @@ describe('the left column', () => {
     expect(screen.getByRole('heading', { name: 'title-a' })).toBeDefined()
   })
 
-  it('selects a card from the constraint band', () => {
+  it('marks a constraint in place rather than giving it a band of its own', () => {
     setup(view([
       change(node('root'), 1),
       change(node('G-', { title: '全局约束', parent: 'root' as never }), 2),
       change(bareDuty2('c1', 'G-', '不超预算'), 3),
     ]))
-    fireEvent.click(screen.getAllByRole('button', { name: /不超预算/ })[0] as HTMLElement)
+    const row = screen.getAllByRole('button', { name: /不超预算/ })[0] as HTMLElement
+    expect(row.textContent).toContain('⚖')
+    fireEvent.click(row)
     expect(screen.getByRole('heading', { name: '不超预算' })).toBeDefined()
-    // Back on the root, the band's entry shows with no duty rather than with a gap.
+    // The card's own constraints view still lists it, with no duty rather than a gap.
     fireEvent.click(screen.getAllByRole('button', { name: /title-root/ })[0] as HTMLElement)
     openTag('⁄全局约束')
     expect(screen.getAllByText('不超预算').length).toBeGreaterThan(1)

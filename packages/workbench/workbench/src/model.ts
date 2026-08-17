@@ -142,6 +142,26 @@ export interface NodeTmp {
 }
 
 /**
+ * Whether a `user/message` is a person speaking.
+ *
+ * A `user/message` is not always a person: the prompt and context plugins inject
+ * runtime snapshots through the same event, carrying `source.kind: 'plugin'`. The
+ * first-hand layer is the person's own words and nothing else — one machine-written
+ * paragraph in it makes every citation drawn from the layer unreliable, and the
+ * conversation column shows it back to them as something they said.
+ *
+ * Read structurally because the message is durable data another package wrote. This
+ * is the ONE home for the rule: the mirror decides what to carry with it, and the
+ * package invariant decides what the mirror owes with it, so the two cannot drift.
+ * @param data - the `user/message` event's payload.
+ * @returns true when a person authored it.
+ */
+export function isPersonSaid(data: unknown): boolean {
+  const { source } = data as { source?: { kind?: unknown } }
+  return source?.kind === 'user'
+}
+
+/**
  * An edit-state write as it crosses a wire. `at` is absent because it is the
  * receiving process's stamp: a browser clock that is wrong, or lying, must not be
  * able to put a time into the log.

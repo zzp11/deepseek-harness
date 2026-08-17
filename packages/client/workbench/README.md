@@ -2,7 +2,11 @@
 
 English | [中文](README.zh.md)
 
-Browser half of the workbench: the 工作台 tab beside the conversation. Three columns — a module tree that says where you are, one card that says what this module is, and a digest of what was said on that module — plus the meter strip along the bottom. [dsh-workbench](../../workbench/workbench/README.md) owns the tree, the gates, and every write; the design record is the [card-model Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-workbench-card-model.md).
+Browser half of the workbench: the 工作台 tab beside the conversation. Three columns — a directory that says where you are, one card that says what this module is, and a column holding what was said on that module with the composer under it. [dsh-workbench](../../workbench/workbench/README.md) owns the tree, the gates, and every write; the design record is the [card-model Agent Note](../../../.agents/notes/implemented/feature/2026-08-14-workbench-card-model.md).
+
+The left column is one flat indented list, not banded groups: a row carries a mark, a title, and a count only when that count is non-zero. Bands are not mutually exclusive, so the same card appeared in two or three of them at once — `⚖` on the row says a card governs the others without giving it a second place to live. There is no meter strip; the accountability figures it carried have no home yet (see Known Limitations).
+
+The composer is the platform's one composer, not a second input. This view declares ui-conversation's `conversation.view.composer` seat, so the existing composer subtree renders into the bottom of the right column and keeps its draft, its images, and its chain election ([decision](../../../.agents/notes/implemented/feature/2026-08-17-conversation-view-composer-dock.md)). Because it sits inside a column, this view reserves no bottom clearance.
 
 The fold, and every derived quantity it renders, come from that package's `./projection` entry — the same code the host runs. Nothing here recomputes a dependency set, a submodule map, or a maturity mark.
 
@@ -32,3 +36,5 @@ None; this package neither assembles nor sends a provider request.
 - **An anchor's validity ends when its body is replaced** — a proposal that supersedes a body takes the object ids with it.
 - **The conversation digest is per module, but the history is not** — the digest filters by the module an utterance was said in; the session itself remains one thread.
 - **Selection, the open tag, and the argument's chosen form are browser-local** — none survives a reload, because none is content and the host owns no event for them.
+- **The accountability figures have no surface** — the meter strip that carried them (model-written nodes nobody edited, mean body length, field vocabulary) was removed because every figure read `0` on an empty project. The need behind them stands: a person's own sense of how much they verified is not reliable, so the count has to come from outside. Where they land is undecided; the candidate is per-card and hidden when empty.
+- **Typing is local until the field is left** — an input binds a local draft and autosaves on blur, and 确定 carries that draft with it. Binding the input directly to the host's stored draft raced the round trip and dropped most of what was typed. The cost is that a crash between two blurs loses the keystrokes since the last one.

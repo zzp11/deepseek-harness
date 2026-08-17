@@ -120,6 +120,9 @@ function setup(tree: WorkbenchTreeView | undefined, overrides: Partial<Workbench
     useStore: bindSnapshotSelector(store),
     actions: store.actions,
     t,
+    // The composer's seat. ui-conversation owns what goes in it; these specs only
+    // need the tab to offer the seat, which is what the marker proves.
+    renderSlot: (name: string) => <div data-slot={name} />,
     ...injected,
   } as unknown as WorkbenchTabProps
   return { ...injected, actions: store.actions, view: render(<WorkbenchTab {...props} />) }
@@ -129,17 +132,18 @@ describe('the first screen', () => {
   it('asks for one sentence when nothing has happened yet', () => {
     setup(undefined)
     expect(screen.getByText(zh['empty.title'])).toBeDefined()
-    expect(screen.getByText(zh['meter.rev'].replace('{n}', '0'))).toBeDefined()
+    expect(screen.getByText(zh['map.empty'])).toBeDefined()
   })
 })
 
 describe('the left column', () => {
-  it('pins the constraints, the working set, and the rest, each with its count', () => {
+  it('is one indented list, with no band headers and no counts to read', () => {
     setup(view([change(node('root', { maturity: 'committed' }), 1), change(node('leaf', { parent: 'root' as never }), 2)]))
-    expect(screen.getByText(`⚖ ${zh['map.constraints']}`)).toBeDefined()
-    expect(screen.getByText(zh['map.working'])).toBeDefined()
-    expect(screen.getByText(zh['map.rest'])).toBeDefined()
-    expect(screen.getByText(zh['map.constraintsEmpty'])).toBeDefined()
+    expect(screen.getAllByRole('button', { name: /title-root/ })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /title-leaf/ })).toHaveLength(1)
+    // The child is indented under its parent; the depth is the whole hierarchy cue.
+    const leaf = screen.getByRole('button', { name: /title-leaf/ })
+    expect(leaf.style.paddingLeft).toBe('20px')
   })
 
   it('scans: a row carries a mark, a title, and nothing editable', () => {
@@ -213,7 +217,7 @@ describe('the two states of one card', () => {
       event('workbench/scratch', { nodeId: 'root', tmp: { title: '改了一半', at: 0 } }, 2),
     ]))
     fireEvent.click(screen.getByRole('button', { name: zh['card.commit'] }))
-    expect(commitTmp).toHaveBeenCalledWith('root')
+    expect(commitTmp).toHaveBeenCalledWith('root', expect.objectContaining({ title: '改了一半' }))
     fireEvent.click(screen.getByRole('button', { name: zh['card.discard'] }))
     expect(discardTmp).toHaveBeenCalledWith('root')
   })
@@ -226,13 +230,62 @@ describe('the two states of one card', () => {
     expect(screen.getByLabelText(zh['card.title'])).toHaveProperty('value', '还没提交的标题')
   })
 
-  it('writes what the person types into the edit state, which costs no rev', () => {
+  it('keeps typing local, and autosaves the draft when the field is left', () => {
+    // The failure this closes: the field's value came back from the host, so a person
+    // typing faster than the round trip watched most of their characters vanish.
     const { setTmp } = setup(view([
       change(node('root'), 1),
       event('workbench/scratch', { nodeId: 'root', tmp: { title: '甲', at: 0 } }, 2),
     ]))
-    fireEvent.change(screen.getByLabelText(zh['card.title']), { target: { value: '乙' } })
-    expect(setTmp).toHaveBeenCalledWith('root', expect.objectContaining({ title: '乙' }))
+    const title = screen.getByLabelText(zh['card.title'])
+    fireEvent.change(title, { target: { value: '乙' } })
+    fireEvent.change(title, { target: { value: '乙丙' } })
+    fireEvent.change(title, { target: { value: '乙丙丁' } })
+    expect(setTmp).not.toHaveBeenCalled()
+    expect(title).toHaveProperty('value', '乙丙丁')
+    fireEvent.blur(title)
+    expect(setTmp).toHaveBeenCalledTimes(1)
+    expect(setTmp).toHaveBeenCalledWith('root', expect.objectContaining({ title: '乙丙丁' }))
+  })
+
+  it('commits the draft it is holding, not the one the host last autosaved', () => {
+    const { commitTmp } = setup(view([
+      change(node('root'), 1),
+      event('workbench/scratch', { nodeId: 'root', tmp: { title: '存到一半', at: 0 } }, 2),
+    ]))
+    fireEvent.change(screen.getByLabelText(zh['card.title']), { target: { value: '最终的标题' } })
+    fireEvent.click(screen.getByRole('button', { name: zh['card.commit'] }))
+    expect(commitTmp).toHaveBeenCalledWith('root', expect.objectContaining({ title: '最终的标题' }))
+  })
+
+  it('keeps the model’s body edits in the draft while the person retypes the title', () => {
+    // The whole point of one card with two states: a model proposal opens the edit
+    // state carrying its edits to the content bodies, and the person's own typing rides
+    // on top of them. Seeding the local draft from three named fields dropped
+    // `bodies` and `fromProposal` on the floor, so the first blur or 确定 committed
+    // the person's title and silently threw the model's work away.
+    const edited = [brief('b1', { duty: 'AI 改过的职责', body: 'AI 改过的正文' })]
+    const { setTmp, commitTmp } = setup(view([
+      change(node('root'), 1),
+      event('workbench/scratch', {
+        nodeId: 'root',
+        tmp: { title: 'AI 起的名字', bodies: edited, fromProposal: 'p1', at: 0 },
+      }, 2),
+    ]))
+    const title = screen.getByLabelText(zh['card.title'])
+    fireEvent.change(title, { target: { value: '人改的名字' } })
+    fireEvent.blur(title)
+    expect(setTmp).toHaveBeenCalledWith('root', expect.objectContaining({
+      title: '人改的名字',
+      bodies: edited,
+      fromProposal: 'p1',
+    }))
+    fireEvent.click(screen.getByRole('button', { name: zh['card.commit'] }))
+    expect(commitTmp).toHaveBeenCalledWith('root', expect.objectContaining({
+      title: '人改的名字',
+      bodies: edited,
+      fromProposal: 'p1',
+    }))
   })
 })
 
@@ -293,27 +346,26 @@ describe('the conversation column', () => {
   })
 })
 
-describe('the meter', () => {
-  it('publishes the round, the rev, the △ account, and the structuring trend', () => {
+describe('the page carries no counters', () => {
+  it('shows no round, rev, or trend numbers of its own', () => {
+    // Five numbers reading 0 across an empty project is not a measurement, it is
+    // noise. The counts that mean something stay where they are about something:
+    // `⚑n` on the card and the row it belongs to.
     setup(view([
       change(node('a', { source: 'ai', bodies: [brief('a-brief', { body: '模型写的一段' })] }), 1),
       change(node('b'), 2),
     ]))
-    expect(screen.getByText(zh['meter.commits'].replace('{n}', '2'))).toBeDefined()
-    expect(screen.getByText(zh['meter.rev'].replace('{n}', '2'))).toBeDefined()
-    expect(screen.getByText(zh['meter.ai'].replace('{n}', '1'))).toBeDefined()
+    expect(screen.queryByText(/第 \d+ 轮/)).toBeNull()
+    expect(screen.queryByText(/累计 rev/)).toBeNull()
+    expect(screen.queryByText(/正文均长/)).toBeNull()
   })
 
-  it('counts results waiting only while any are', () => {
-    const waiting = view([
+  it('still says a result is waiting, on the card it is waiting on', () => {
+    setup(view([
       change(node('root'), 1),
       event('workbench/proposal', { proposalId: 'p1', targetNode: 'root', title: '一份草稿', createdAt: 0 }, 2),
-    ])
-    setup(waiting)
-    expect(screen.getByText(zh['meter.reminders'].replace('{n}', '1'))).toBeDefined()
-    cleanup()
-    setup(view([change(node('root'), 1)]))
-    expect(screen.queryByText(zh['meter.reminders'].replace('{n}', '1'))).toBeNull()
+    ]))
+    expect(screen.getAllByText(/⚑1/).length).toBeGreaterThan(0)
   })
 })
 

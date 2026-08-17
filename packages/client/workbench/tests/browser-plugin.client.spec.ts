@@ -155,8 +155,16 @@ describe('the browser half', () => {
     await face.setTmp('n1' as NodeId, {})
     expect(lastRequest(b.execute)).toEqual({ op: 'set-tmp', nodeId: 'n1', tmp: {} })
 
+    // Committing with no draft is the pending bar's 确定 on a draft the host already
+    // holds; committing WITH one carries the keystrokes the card had not autosaved
+    // yet, so the last thing typed cannot be lost between blur and 确定.
     await face.commitTmp('n1' as NodeId)
     expect(lastRequest(b.execute)).toEqual({ op: 'commit-tmp', nodeId: 'n1' })
+
+    await face.commitTmp('n1' as NodeId, { title: '最终的标题' })
+    expect(lastRequest(b.execute)).toEqual({
+      op: 'commit-tmp', nodeId: 'n1', tmp: { title: '最终的标题' },
+    })
 
     await face.discardTmp('n1' as NodeId)
     expect(lastRequest(b.execute)).toEqual({ op: 'discard-tmp', nodeId: 'n1' })

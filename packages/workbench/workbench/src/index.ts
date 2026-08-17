@@ -19,6 +19,7 @@ import type { CommandInvocation, CommandResult } from '@deepseek-ai/dsh-commands
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { BodyId, NodeId, SourceId } from './brand.ts'
+import { isPersonSaid } from './model.ts'
 import { ensureCheckpoint } from './checkpoint.ts'
 import { EDIT_OPS, planEdit, type EditClock, type EditRequest } from './edit.ts'
 import { renderFindings } from './gates.ts'
@@ -160,6 +161,7 @@ function mirrorUtterance(
  * @returns the words, or `''` when it carries none.
  */
 function messageText(event: SessionEvent): string {
+  if (!isPersonSaid(event.data)) return ''
   const { content } = event.data as { content?: unknown }
   if (!Array.isArray(content)) return ''
   return content

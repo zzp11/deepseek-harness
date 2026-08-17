@@ -73,6 +73,11 @@ export function apply(ctx: ClientContext): void {
     id: 'workbench',
     order: 20,
     locale: NS,
+    // The composer belongs in the conversation column, under the exchange it
+    // continues — not floating at the foot of a three-column page that has no
+    // transcript running down it. Declaring the seat is what moves the ONE
+    // composer here; ui-conversation renders its own into it.
+    children: { 'conversation.view.composer': { kind: 'single', scope: 'session' } },
     label: () => t('view.workbench'),
     store,
     inject: (sessionId: SessionId): WorkbenchInjected => ({
@@ -95,7 +100,8 @@ export function apply(ctx: ClientContext): void {
       rejectProposal: (proposalId: ProposalId, reason: string) =>
         dispatch(sessionId, { op: 'reject-proposal', proposalId, reason }),
       setTmp: (nodeId: NodeId, tmp: TmpDraft) => dispatch(sessionId, { op: 'set-tmp', nodeId, tmp }),
-      commitTmp: (nodeId: NodeId) => dispatch(sessionId, { op: 'commit-tmp', nodeId }),
+      commitTmp: (nodeId: NodeId, tmp?: TmpDraft) =>
+        dispatch(sessionId, { op: 'commit-tmp', nodeId, ...tmp === undefined ? {} : { tmp } }),
       discardTmp: (nodeId: NodeId) => dispatch(sessionId, { op: 'discard-tmp', nodeId }),
       deleteBody: (nodeId: NodeId, bodyId: BodyId) => dispatch(sessionId, { op: 'delete-body', nodeId, bodyId }),
       openIdeas: (nodeId: NodeId) => dispatch(sessionId, { op: 'open-ideas', nodeId }),

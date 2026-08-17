@@ -22,11 +22,19 @@ interface Breadcrumb {
 
 const DEFAULT_VIEW_ID = 'chat'
 
-/** Resolve by id and keep stale persisted selections on the stable Chat fallback. */
+/**
+ * Resolve by id and keep stale persisted selections on the stable Chat fallback.
+ *
+ * The last fallback is the first registered view, not nothing: a composition may
+ * turn the Chat view off (see this package's `chatView` config), and falling through
+ * to `undefined` there would render an empty session pane rather than the one view
+ * that exists.
+ */
 function resolveActiveView(tabs: readonly ViewTab[], selectedId: string | null): ViewTab | undefined {
   const requestedId = selectedId ?? DEFAULT_VIEW_ID
   return tabs.find(view => view.id === requestedId)
     ?? tabs.find(view => view.id === DEFAULT_VIEW_ID)
+    ?? tabs[0]
 }
 
 function deriveAncestry(list: SessionListState, id: SessionId): readonly Breadcrumb[] {

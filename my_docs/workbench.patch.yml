@@ -1,4 +1,4 @@
-# 方案C 工作台 —— 阶段 0 开发用 --patch overlay。
+# 方案C 工作台 —— 开发用 --patch overlay。
 #
 #   pnpm dsh web --patch my_docs/workbench.patch.yml --port 3081
 #
@@ -14,6 +14,15 @@
 # name 由 $DSH_HOME/profiles/node_modules 解析，而那个回退目录是按 app 依赖闭包 BFS
 # healed 出来的。两个 60 天分别被改 60／88 次的热文件（apiproxy 的 rpc-map.ts 与
 # web-app 的 cordis.patch.yml）都不用碰。详见 my_docs/04-实现偏差记录.md D-01／D-16。
+
+# 轨迹页是同一段会话的第三种看法，关掉。要看它时把 disabled 去掉即可，不删包。
+#
+# 「对话」那个 tab 关不掉：它由 ui-conversation 的**浏览器半边**注册，而客户端插件
+# 没有从 cordis.yml 拿配置的通道 —— boot graph 只带 id/url/rev/inject（见
+# packages/client/modules/src/client/manifest.ts 的 WebBootEntry）。详见 04 的 D-47。
+- id: ui-trajectory
+  disabled: true
+
 - insert:
     - id: workbench
       name: '@deepseek-ai/dsh-workbench'

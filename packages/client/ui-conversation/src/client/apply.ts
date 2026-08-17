@@ -13,6 +13,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { ViewTab } from './contract/views.ts'
 import type {
   ApprovalWait, ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected, ComposerBarInjected,
+  ComposerDockInjected,
   ComposerChainProps, ConversationInjected, ConversationSessionHeaderInjected, ConversationSessionInjected,
   DetailsInjected,
 } from './contract/slots.ts'
@@ -21,6 +22,8 @@ import { createChatStore } from './stores.ts'
 import { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
 import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
+import { ComposerDockRegistry } from './input/dock.ts'
+import { ComposerDockHost } from './skeleton/ComposerDockHost.tsx'
 import type { ComposerBlock } from './input/blocks.ts'
 import { InputHub } from './input/hub.ts'
 import { ComposerSubmissionPolicy } from './input/submission-policy.ts'
@@ -174,6 +177,7 @@ export function apply(ctx: Context): void {
   // here, and the bar reads its own session's store. It cannot flow the other
   // way: this package must not import the plugins that would know.
   const composerBlocks = new ComposerBlockRegistry()
+  const composerDocks = new ComposerDockRegistry()
 
   // The input machine feeds every session-scope slot
   // component through the standard provide channel — the 'input' hook plus
@@ -211,6 +215,7 @@ export function apply(ctx: Context): void {
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       hooks: { composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId) },
+      composerDock: composerDocks,
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaces.connectWorkspace(workspaceId)
         if (sessionId !== undefined && nextId !== sessionId) {
@@ -232,6 +237,17 @@ export function apply(ctx: Context): void {
       },
     }),
   }, ConversationRoot)
+
+  // The composer's docked seat. Registered through `inject` because the slot is
+  // declared by whichever conversation view offers it — no view, no seat, and the
+  // composer keeps its default position at the foot of the column.
+  ctx.slots.inject('conversation.view.composer', () => ctx.slots.register({
+    name: 'conversation.view.composer',
+    locale: NS,
+    inject: (): ComposerDockInjected => ({
+      offerSeat: (host: HTMLElement | null) => { composerDocks.set(host) },
+    }),
+  }, ComposerDockHost))
 
   // The strict session body fills the resident scrollport without owning it;
   // the Hero/composer path therefore stays fixed while the first blank

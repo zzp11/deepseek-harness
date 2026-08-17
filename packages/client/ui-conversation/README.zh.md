@@ -12,6 +12,8 @@
 
 视图环是一个 slot：严格会话主体注册在 `children` 表中声明会话作用域的 `'conversation.view'` 列表，并通过自身的 renderSlot share 渲染活跃配置项（`only: <active id>`）；视图标签页则从注册选项（`id`／`order`／`label`）投影而来。聊天视图是该包自身的配置项；ui-trajectory 等插件通过 `ctx.slots.register` 贡献标签页，每个视图负责自己的 chrome。
 
+不是转录的视图，可以把 composer 收进自己内部、而不是留在这一列的最底下：声明会话作用域的单占位座 `'conversation.view.composer'`，本包便会往里注册一个宿主，`ConversationRoot` 则用 portal 把**它已有的那一棵** composer 子树渲染进这个宿主。**永远不会有第二个 composer** —— 这个座位搬动的是已经存在的那一个，所以草稿、已附图片、chain election 与提交模式偏好都只有一个家。接管了 composer 的视图**不得**再为默认座位留底部避让；没有声明这个座的视图，其吸底座位与 `--dsh-composer-height` 契约完全不变（[决定](../../../.agents/notes/implemented/feature/2026-08-17-conversation-view-composer-dock.md)）。
+
 Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。Client 插件通过 declaration merging 增加类型化 `ChatNodeDataMap` key，在 `ctx.conversationEvents` 上注册 `ConversationNodeDefinition`，再向 `conversation.chat.node` 注册匹配的 keyed renderer；它无须修改会话 fold 或中央 renderer switch。稳定事件 id、append/prepend 回放、Location data 与 renderer 约束见 [Conversation Node 实操手册](../../../docs/cookbook/adding-a-conversation-node.md)。
 
 会话页头会在标题旁渲染会话作用域的 `'conversation.session.header.actions'` 列表，并在最右侧渲染独立的 `'conversation.session.header.utilities'` 列表。会话上下文和谱系控件保留在 `actions` 中；可选的会话工具不会改变它们的顺序或位置。编辑器链的 currency 包含当前对话 `session`；ui-subagent 会选取 one-shot 或 parent 不可用的已寻址会话，并按原因显示只读文案，而普通 InputBar 会让所有已寻址 child 仅保留 Send，因为继续执行服务不公开逐 Activation 取消操作，`session.cancel` 也会绕过其所有权。
@@ -62,6 +64,7 @@ Host 带 placement 的 `session/queue` 快照也会携带待处理 steering。Qu
 - **已发送的 user 消息无法编辑**：user 气泡保留时钟和复制；分支只存在于 assistant 回答之下（[决策](../../../.agents/notes/implemented/simplification/2026-08-06-user-bubbles-drop-the-branch-action.md)）。编辑功能要与其背后的能力一起回归：既需要针对已定稿 user 消息的 client 变更，也需要 host 侧对已经消费过它的轮次给出行为（[决策](../../../.agents/notes/implemented/simplification/2026-07-31-drop-user-message-edit-stub.md)）。
 - **others 工具行的闪光图标是手绘近似版本**：无法在本地导出设计字形的矢量几何；等到存在精确导出后再将其提升到 ui-primitives。
 - **审批面板的「始终允许此类」暂缓**：持久授权需要授权存储设计；今天只能回答允许一次／拒绝。
+- **接管 composer 无法从配置打开**：浏览器半边的插件拿不到 `cordis.yml` 的配置（客户端 boot graph 条目只带 `id`／`url`／`rev`／`inject`），所以**声明 `conversation.view.composer` 是视图唯一的开关**。接管视图还会在这次搬动中丢掉只存在 DOM 里的状态：换掉 portal 的容器会重建子树，于是光标位置与正在进行中的输入法组词活不过接管或释放，也不许有任何东西依赖跨座位的元素同一性。草稿、图片与提交模式**能**活下来，因为它们住在 portal 之上的会话输入机里（[决定](../../../.agents/notes/implemented/feature/2026-08-17-conversation-view-composer-dock.md)）。
 - **TodoPanel 将过长条目截成单行省略号**：figma 条没有换行或展开入口，完整文本无法在行内读完。
 - **Queue 编辑仅支持文本**：包含非文本块的行仍显示扁平化预览，但由于内联编辑器无法保留这些块，其编辑控件会被禁用。文本行进入编辑模式后，删除和严格 steering 操作会被保存和取消取代；Enter 保存，Escape 取消。
 - **Queue 严格 steering 会保留完整消息**：agent 运行期间，steering 操作会以原子方式把所寻址的 Queue 单次入队项转移到当前 next-step 窗口。包含混合内容的行仍可使用此操作，因为它会转发不可变消息，而非文本投影。带 placement 的 Host 快照会在会话流末尾渲染待处理 steering，直到已消费的 `user/message` 折叠进持久 transcript（文本记录），因此立即展示、重连和回放共享同一个线性权威。

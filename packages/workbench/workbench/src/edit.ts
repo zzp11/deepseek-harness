@@ -71,8 +71,16 @@ export type EditRequest =
    * card that is already committed.
    */
   | { readonly op: 'set-tmp'; readonly nodeId: NodeId; readonly tmp: TmpDraft }
-  /** 确定: fold the edit state into the card as one commit, then clear it. */
-  | { readonly op: 'commit-tmp'; readonly nodeId: NodeId }
+  /**
+   * 确定: fold the edit state into the card as one commit, then clear it.
+   *
+   * `tmp` carries the person's final draft and supersedes what the log holds. It is
+   * how the browser keeps a round trip out of the typing path: an input whose value
+   * comes back from the host drops characters typed faster than the trip, so the
+   * field is local while it has focus and the commit brings the whole draft with it.
+   * The stored edit state is then an autosave against a crash, not the render source.
+   */
+  | { readonly op: 'commit-tmp'; readonly nodeId: NodeId; readonly tmp?: TmpDraft }
   /** 丢弃: drop the edit state, leaving the committed card untouched. */
   | { readonly op: 'discard-tmp'; readonly nodeId: NodeId }
   /** Remove one authored body. Immediate and free; the brief cannot go. */
@@ -184,7 +192,7 @@ export function planEdit(state: WorkbenchState, request: EditRequest, clock: Edi
     case 'discard-tmp':
       return planScratch(state, request.nodeId, null, clock)
     case 'commit-tmp':
-      return planCommitTmp(state, request.nodeId)
+      return planCommitTmp(state, request.nodeId, request.tmp)
     case 'delete-body':
       return planDeleteBody(state, request.nodeId, request.bodyId)
     case 'open-ideas':
@@ -436,11 +444,14 @@ function planFocus(state: WorkbenchState, nodeId: NodeId | null): EditPlan {
  * needed and a crash between the two cannot leave a card editing over content that
  * already landed.
  */
-function planCommitTmp(state: WorkbenchState, nodeId: NodeId): EditPlan {
+function planCommitTmp(state: WorkbenchState, nodeId: NodeId, final?: TmpDraft): EditPlan {
   const node = state.nodes.get(nodeId)
   if (node === undefined) return refuseRequest(`节点 ${nodeId} 不存在`)
-  const tmp = state.tmp.get(nodeId)
-  if (tmp === undefined) return refuseRequest(`节点 ${nodeId} 没有待提交的改动`)
+  const stored = state.tmp.get(nodeId)
+  if (stored === undefined) return refuseRequest(`节点 ${nodeId} 没有待提交的改动`)
+  // The caller's final draft wins over the autosaved one, field by field: the
+  // autosave is whatever landed before the person stopped typing.
+  const tmp = final === undefined ? stored : { ...stored, ...final }
   const rev = nextRev(state.meta)
   const committed = {
     ...node,

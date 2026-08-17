@@ -222,6 +222,19 @@
   flex: none;
 }
 
+/* Docked into a view's own seat: the sticky floor posture belongs to the column
+   this composer is no longer at the foot of. */
+.composerSeatDocked {
+  position: static;
+  padding: 0;
+}
+
+/* The seat a view offers. It carries no chrome of its own — the composer brings
+   its own — and only needs to be a block the portal can fill. */
+.composerDockHost {
+  display: block;
+}
+
 .scrollBody {
   display: flex;
   flex: 1;
@@ -353,7 +366,20 @@
 
 /* Hero: the composer sits inside the session scroll body; center there so
    the tree seat matches active (sticky footer) without a Root remount. */
-.root[data-phase='hero'] .scrollBody {
+.root[data-phase='hero'] /* Docked into a view's own seat: the sticky floor posture belongs to the column
+   this composer is no longer at the foot of. */
+.composerSeatDocked {
+  position: static;
+  padding: 0;
+}
+
+/* The seat a view offers. It carries no chrome of its own — the composer brings
+   its own — and only needs to be a block the portal can fill. */
+.composerDockHost {
+  display: block;
+}
+
+.scrollBody {
   justify-content: center;
   overflow-y: auto;
 }

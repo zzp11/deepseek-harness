@@ -164,6 +164,21 @@ describe('edit state', () => {
     expect(state.nodes.get(NodeId('n1'))?.bodies).toBeUndefined()
   })
 
+  it('takes the draft 确定 brings with it over the autosaved one', () => {
+    // The browser keeps a round trip out of the typing path: the field is local while
+    // it has focus, and the commit carries the whole draft. Without this the last
+    // characters typed before 确定 would be lost to an autosave that never landed.
+    let state = stateWith(['n1', { bodies: [brief('b1')] }])
+    state = run(state, { op: 'set-tmp', nodeId: NodeId('n1'), tmp: { body: '存到一半' } })
+    state = run(state, { op: 'commit-tmp', nodeId: NodeId('n1'), tmp: { body: '每两周一次，一次一个人讲' } })
+    expect(state.nodes.get(NodeId('n1'))?.body).toBe('每两周一次，一次一个人讲')
+  })
+
+  it('still refuses 确定 on a card nobody opened, draft or no draft', () => {
+    const state = stateWith(['n1', { bodies: [brief('b1')] }])
+    expect(planEdit(state, { op: 'commit-tmp', nodeId: NodeId('n1'), tmp: { body: '硬塞' } }, clock()).ok).toBe(false)
+  })
+
   it('refuses 确定 when nothing is pending', () => {
     const state = stateWith(['n1', { bodies: [brief('b1')] }])
     const plan = planEdit(state, { op: 'commit-tmp', nodeId: NodeId('n1') }, clock())
