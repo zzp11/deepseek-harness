@@ -133,7 +133,12 @@ export function Card(props: CardProps): React.JSX.Element {
   const edit = (patch: Partial<NodeTmp>): void => { setDraft(current => ({ ...current, ...patch })) }
   const save = (): void => { props.onEditTmp(draft) }
   const tags = view.tags
-  const active = tags.find(tag => tag.key === props.openTag) ?? tags[0]
+  // What the card opens on is its own content. Falling back to `tags[0]` opened a
+  // body-less card on its idea area — every card has one now — which answers "what is
+  // this card" with "here is somewhere to put an unconfirmed thought". With nothing
+  // authored, `active` stays undefined and the body area says so instead.
+  const active = tags.find(tag => tag.key === props.openTag)
+    ?? tags.find(tag => tag.kind === 'authored')
   const visible = tags.slice(0, VISIBLE_TAGS)
   const overflow = tags.slice(VISIBLE_TAGS)
   const authored = active?.kind === 'authored' ? active.body : undefined
@@ -233,7 +238,10 @@ export function Card(props: CardProps): React.JSX.Element {
             : (
               <DerivedBodyView
                 view={active.view}
-                empty={t('card.viewEmpty')}
+                // The idea area is the one derived view that is empty on a card nobody
+                // has done anything to, so its empty state has to say what the area is
+                // FOR rather than that it drew nothing.
+                empty={t(active.view.kind === 'ideas' ? 'view.ideasEmpty' : 'card.viewEmpty')}
                 anchoredObject={props.anchorObjectId}
                 onAnchor={props.onAnchor}
                 onEnter={props.onEnter}

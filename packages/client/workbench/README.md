@@ -24,6 +24,8 @@ A model draft aimed at an existing card is not a second kind of card: it puts th
 
 The strip distinguishes two kinds of content. An **authored** body (brief, table, flow, argument) has its own stored truth, can be removed, and can be marked `⚠` when it is older than a newer body on the same card. A **derived** view (`⁄` prefix: submodule map, relation graph, global constraints, ideas, chart) is computed per read, so it can be neither edited nor stale. A tag carries the body or the view it opens rather than a key into a second table, so the strip and the body area cannot disagree.
 
+The `⁄想法` tag is on every card, and a card still opens on its own content: the default view is the first authored body, so a card with none says it has no content body yet rather than opening on an empty idea area. The idea area carries its own empty copy, because it is the one derived view that is empty on a card nobody has touched — it says what the area is for instead of that it drew nothing.
+
 Double-clicking an addressable object inside a body — a table row, a flow step, an argument's ground — anchors the conversation to it; double-clicking a card in the submodule map descends into it, and the breadcrumb comes back.
 
 Every question is asked in one row, in place. A dialog would take the caret from whatever the person was typing, which is the one thing the result-arrives path must not do.

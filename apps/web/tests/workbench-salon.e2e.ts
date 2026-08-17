@@ -217,23 +217,27 @@ describe('web e2e: the workbench, one long human flow', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('opens an idea area on the card, and keeps it out of the tree', async () => {
+  it('offers an idea area on every card, and keeps its root out of the tree', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-workbench-ideas'))
-    // Opening the area is an action on the card, not a tab that shows nothing: the
-    // tag appears only once the area exists.
-    expect(await card().getByRole('button', { name: '⁄想法' }).count()).toBe(0)
-    await card().getByRole('button', { name: '⋯' }).last().click()
-    await page.getByRole('menuitem', { name: 'Open the idea area' }).click()
+    // Scenario 7.1: the tag is there before anything is in it. Somewhere to put an
+    // unconfirmed thought has to exist before the thought does.
     const ideas = card().getByRole('button', { name: '⁄想法' })
-    await ideas.waitFor({ timeout: 10_000 })
+    await expect.poll(() => ideas.count(), { timeout: 10_000 }).toBe(1)
     await ideas.click()
-    // Empty, and its root is nowhere in main-region navigation — an unconfirmed
-    // thought must not be reachable by scanning the tree.
+    // 7.2: the empty state says what the area is FOR, not that it drew nothing — that
+    // copy is what the tag's earlier absence was standing in for.
     await expect.poll(
-      () => card().getByText('Nothing to draw here yet.').count(),
+      () => card().getByText(/Half-formed thoughts live here/).count(),
       { timeout: 10_000 },
     ).toBe(1)
-    expect(await column().getByRole('button', { name: /想法区/ }).count()).toBe(0)
+    // Opening it for real creates the root, and that root is nowhere in main-region
+    // navigation: an unconfirmed thought must not be reachable by scanning the tree.
+    await card().getByRole('button', { name: '⋯' }).last().click()
+    await page.getByRole('menuitem', { name: 'Open the idea area' }).click()
+    await expect.poll(
+      () => column().getByRole('button', { name: /想法区/ }).count(),
+      { timeout: 10_000 },
+    ).toBe(0)
   }, 60_000)
 
   it('marks a promoted card as a global constraint in place, without a second band', async () => {

@@ -340,7 +340,10 @@ describe('the content bodies', () => {
       change(node('ideas', { parent: 'root' as never, region: 'idea', title: '想法区' }), 2),
     ]))
     openTag('⁄想法')
-    expect(screen.getByText(zh['card.viewEmpty'])).toBeDefined()
+    // The idea area gets its own empty copy: it is the one derived view that is empty on
+    // a card nobody has touched, so it says what the area is FOR rather than that it drew
+    // nothing (scenario 7.2).
+    expect(screen.getByText(zh['view.ideasEmpty'])).toBeDefined()
   })
 
   it('says the submodule map is empty rather than drawing an empty frame', () => {

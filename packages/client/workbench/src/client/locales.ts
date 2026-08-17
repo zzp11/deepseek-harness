@@ -6,6 +6,7 @@ export type WorkbenchKey = keyof typeof zh
 /** Chinese copy, the product's own language. */
 export const zh = {
   'view.workbench': '工作台',
+  'view.ideasEmpty': '这里放还没确认、也还没落地的想头。想到什么先扔进来，它不进本体、对模块外也不可见。',
   'map.empty': '还没有卡片。',
   'map.add': '＋ 加一张卡',
   'map.addAsk': '新卡片的标题',
@@ -60,6 +61,7 @@ export const zh = {
 /** English copy. */
 export const en: Record<WorkbenchKey, string> = {
   'view.workbench': 'Workbench',
+  'view.ideasEmpty': 'Half-formed thoughts live here — nothing confirmed, nothing landed. Put one down as it occurs to you: it stays out of the tree, and out of sight from anywhere outside this module.',
   'map.empty': 'No cards yet.',
   'map.add': '＋ Add a card',
   'map.addAsk': 'Title of the new card',

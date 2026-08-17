@@ -533,12 +533,13 @@ export function derivedViews(
     }
   }
   if (node.parent === null) views.push({ kind: 'constraints', items: constraints(graph) })
-  // Offered only once the area exists. A tag for something not there yet reads as
-  // "there are ideas, you just have not looked", which is the wrong signal; opening
-  // the area is an action on the card, not a tab that shows nothing.
-  if (children(graph, nodeId).some(child => child.region === 'idea')) {
-    views.push({ kind: 'ideas', items: ideaArea(graph, records, nodeId) })
-  }
+  // Every card has one, always. The earlier rule offered it only once an idea root
+  // existed, on the argument that a tag for something absent reads as "there are ideas,
+  // you just have not looked" — but that is answered by the empty state saying what the
+  // area is FOR (unconfirmed, not yet landed) rather than by hiding the tag. Somewhere to
+  // put a thought that is not a commitment has to be there before the thought is, or the
+  // person has already put it somewhere else.
+  views.push({ kind: 'ideas', items: ideaArea(graph, records, nodeId) })
   return views
 }
 

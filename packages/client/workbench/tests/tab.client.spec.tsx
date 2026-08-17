@@ -192,7 +192,26 @@ describe('the card', () => {
     expect(screen.getByText(zh['source.ai'])).toBeDefined()
   })
 
-  it('says so when a card has no content body and nothing to derive either', () => {
+  it('carries the idea tag on every card, including one nobody has opened', () => {
+    // Scenario 7.1: somewhere to put a thought that is not a commitment has to exist
+    // before the thought does. It opens on an empty state that says what it is for
+    // (7.2), which is what the tag's earlier absence was standing in for.
+    setup(view([change(node('root'), 1)]))
+    const ideas = screen.getByRole('button', { name: '⁄想法' })
+    expect(ideas).toBeDefined()
+    fireEvent.click(ideas)
+    expect(screen.getByText(zh['view.ideasEmpty'])).toBeDefined()
+  })
+
+  it('opens a card on its own content, not on its idea area', () => {
+    // The idea tag is last, and a card with a brief opens on the brief. A body-less card
+    // opens on neither: it says it has no content body yet.
+    setup(view([change(node('root'), 1)]))
+    expect(screen.getByRole('button', { name: '简介' })).toBeDefined()
+    expect(screen.queryByText(zh['view.ideasEmpty'])).toBeNull()
+  })
+
+  it('says so when a card has no content body of its own', () => {
     setup(view([
       change(node('root'), 1),
       change(bareNode('bare', { parent: 'root' as never, title: '空卡' }), 2),

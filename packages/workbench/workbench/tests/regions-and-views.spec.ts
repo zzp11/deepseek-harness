@@ -216,10 +216,18 @@ describe('derived views', () => {
     expect(relationEdges(graph, NodeId('a'))).toEqual([{ from: NodeId('a'), to: NodeId('b'), via: '依赖' }])
   })
 
-  it('omits a view that would draw nothing — including an idea area nobody has opened', () => {
-    expect(derivedViews(nested, [], NodeId('sub'))).toEqual([])
+  it('omits a view that would draw nothing, except the idea area, which every card has', () => {
+    // Behaviour changed deliberately: the idea area used to appear only once one existed.
+    // Somewhere to put an unconfirmed thought has to be there BEFORE the thought is, or
+    // the person has already put it somewhere else; the empty state carries the "what is
+    // this for" that hiding the tag was standing in for.
+    expect(derivedViews(nested, [], NodeId('sub')).map(view => view.kind)).toEqual(['ideas'])
     expect(derivedViews(nested, [], NodeId('m')).map(view => view.kind))
       .toEqual(['submodule-map', 'constraints', 'ideas'])
+  })
+
+  it('gives the idea area of a card that has none an empty item list, not a missing view', () => {
+    expect(derivedViews(nested, [], NodeId('sub'))).toEqual([{ kind: 'ideas', items: [] }])
   })
 
   it('offers the chart exactly when a card owns a plottable table', () => {

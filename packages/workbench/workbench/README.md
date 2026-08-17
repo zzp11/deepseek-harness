@@ -48,6 +48,8 @@ Accepting mints ids for the whole kept set before resolving parents, so a card c
 
 `workbench/scratch` carries a card's uncommitted edit state so it survives a reload and a change of machine. It never moves `rev`, and it is kept OUT of `WorkbenchNode` — a separate `NodeGraph.tmp` table — so the type the injection path receives has no such field and leaking an uncommitted draft into a model request is unwritable. `at` is stamped from this process's clock; the wire type omits it, so a browser cannot write a time into the log. An empty draft opens edit state on an already-committed card, which is how a person starts editing by hand.
 
+Every card offers an idea area, whether or not one has been opened: `derivedViews` always includes the `ideas` view, empty until an idea root exists. Somewhere to put a thought that is not a commitment has to be there before the thought is, or the person has already put it somewhere else; the empty state saying what the area is for does the work that hiding the tag used to.
+
 A node with `region: 'idea'` roots an idea area. One rule governs visibility: an idea is visible only from a vantage enclosed by every idea root that encloses it — so a parent cannot see it, a sibling cannot, and neither can the card's own submodules. `renderSkeletonIndex` filters by vantage, which is the one place an idea could otherwise reach a model request.
 
 ## Model Experience

@@ -3,6 +3,7 @@
 - text: thought rev 1 person
 - button "简介"
 - button "⁄全局约束"
+- button "⁄想法"
 - button "Edit this card"
 - button "Commit to this"
 - button "Reject"
