@@ -210,6 +210,31 @@ describe(PROPOSE_TOOL, () => {
     }])
   })
 
+  it('lands a proposed flow chart on the card once the person accepts it', async () => {
+    // 幕 2 of the scenario end to end at the host: the person says a flow, the model draws
+    // it on an existing card, and accepting puts it on the node. The drop this closes was
+    // silent — the tool answered 已记下 and the chart never reached the log.
+    const ctx = await mount()
+    const agent = agentOn(ctx, 'propose-flow')
+    await edit(ctx, agent, { op: 'create-child', parentId: null, title: '总纲' })
+    const root = lastNodeId(agent.session)
+
+    const drafted = value(await call(ctx, agent, PROPOSE_TOOL, {
+      title: '给总纲加一份流程图',
+      targetNode: root,
+      bodies: [{ label: '总流程', kind: 'flow', steps: ['定主题', '找讲师', '复盘'] }],
+    }))
+    expect(drafted.kind).toBe('drafted')
+    const draft = eventsOf(agent.session, 'workbench/proposal').at(-1)?.data as WorkbenchProposal
+    expect(draft.bodies).toHaveLength(1)
+
+    await edit(ctx, agent, { op: 'accept-proposal', proposalId: drafted.proposalId as never })
+    const landed = eventsOf(agent.session, 'workbench/node-change').at(-1)?.data as WorkbenchNodeChange
+    const flow = landed.node.bodies?.find(body => body.kind === 'flow')
+    expect(flow?.label).toBe('总流程')
+    expect(flow?.kind === 'flow' ? flow.steps.map(step => step.text) : []).toEqual(['定主题', '找讲师', '复盘'])
+  })
+
   it('carries parentIndex through, so a cold-start draft can describe a tree', async () => {
     // Without this the reader dropped the field and the model's shape never reached the
     // log — every card would land at the root on accept.

@@ -10,7 +10,7 @@
  */
 
 import type { NodeId, ProposalId } from './brand.ts'
-import type { ProposedField, ProposedNode, WorkbenchProposal } from './events.ts'
+import type { ProposedBody, ProposedField, ProposedNode, WorkbenchProposal } from './events.ts'
 import { blockingFindings, runNodeGates, type GateFinding } from './gates.ts'
 import type { NodeField, NodeGraph, WorkbenchNode } from './model.ts'
 import type { WorkbenchEvent, WorkbenchState } from './store.ts'
@@ -23,6 +23,13 @@ export interface ProposalDraft {
   readonly summary?: string
   readonly body?: string
   readonly fields?: readonly ProposedField[]
+  /**
+   * Content bodies for the target card — added, or replacing one it already has. Absent
+   * from this type, the tool's reader still produced them (a spread carries an undeclared
+   * property) while `planProposal` had nothing to copy, so a model's flow chart or table
+   * was dropped and the call still answered `已记下`.
+   */
+  readonly bodies?: readonly ProposedBody[]
   readonly newNodes?: readonly ProposedNode[]
 }
 
@@ -56,6 +63,11 @@ export function planProposal(state: WorkbenchState, draft: ProposalDraft, clock:
     ...draft.summary === undefined ? {} : { summary: draft.summary },
     ...draft.body === undefined ? {} : { body: draft.body },
     ...draft.fields === undefined ? {} : { fields: draft.fields },
+    // The target's content bodies. Omitting these was how a model that drew a flow chart
+    // on an existing card got `草稿 … 已记下` back with the chart gone: the tool read them,
+    // the type carried them, and `planAcceptProposal` already consumed `proposal.bodies`,
+    // so the accept side was waiting on a field this event never wrote.
+    ...draft.bodies === undefined ? {} : { bodies: draft.bodies },
     ...draft.newNodes === undefined ? {} : { newNodes: draft.newNodes },
   }
   return { ok: true, proposalId, events: [{ type: 'workbench/proposal', data: proposal }] }

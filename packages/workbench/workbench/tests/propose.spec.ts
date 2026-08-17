@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { NodeId, ProposalId, SourceId } from '../src/brand.ts'
+import { BodyObjectId, NodeId, ProposalId, SourceId } from '../src/brand.ts'
 import {
   presentCheckPromotionCall, presentProposeCall, presentReadNodesCall, readOnlyConcurrency,
 } from '../src/present.ts'
@@ -49,6 +49,31 @@ describe('planProposal', () => {
       type: 'workbench/proposal',
       data: { ...draft, proposalId: 'p1', createdAt: 1000 },
     }])
+  })
+
+  it('records the content bodies the draft offers for its target', () => {
+    // The failure this closes: `planProposal` built the event without `bodies`, so a
+    // model that drew a flow chart on an existing card got `草稿 … 已记下` back and the
+    // chart was gone. `planAcceptProposal` already read `proposal.bodies`, so the accept
+    // side had been waiting for a field the propose side never wrote.
+    const plan = planProposal(stateWith([node('n1')]), {
+      targetNode: NodeId('n1'),
+      title: '给总纲加一份流程图',
+      bodies: [{
+        label: '总流程',
+        payload: {
+          kind: 'flow',
+          steps: [
+            { stepId: BodyObjectId('s0'), text: '定主题' },
+            { stepId: BodyObjectId('s1'), text: '复盘' },
+          ],
+        },
+      }],
+    }, clock)
+    if (!plan.ok) throw new Error(`unexpected refusal: ${JSON.stringify(plan.findings)}`)
+    const recorded = plan.events[0]?.data as { bodies?: readonly { label: string }[] }
+    expect(recorded.bodies).toHaveLength(1)
+    expect(recorded.bodies?.[0]?.label).toBe('总流程')
   })
 
   it('refuses a parentIndex that does not point at an earlier node', () => {
